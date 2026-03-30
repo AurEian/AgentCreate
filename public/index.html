@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Glass Blog</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+  <link rel="stylesheet" href="css/style.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.0/marked.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+</head>
+<body>
+
+<!-- Background -->
+<div class="orb o1"></div>
+<div class="orb o2"></div>
+<div class="orb o3"></div>
+<div class="grid-bg"></div>
+
+<!-- Navbar -->
+<nav class="nav">
+  <div class="nav-in">
+    <div class="brand" onclick="location.hash='#/'">
+      <svg viewBox="0 0 24 24" fill="currentColor">
+        <path d="M12 2L8 6H4v4l-2 2 2 2v4h4l4 4 4-4h4v-4l2-2-2-2V6h-4L12 2zm0 3.5L14.5 8H17v2.5l2 1.5-2 1.5V16h-2.5L12 18.5 9.5 16H7v-2.5L5 12l2-1.5V8h2.5L12 5.5z"/>
+      </svg>
+      Glass Blog
+    </div>
+
+    <div class="nav-links">
+      <button class="nlink" data-page="home" onclick="location.hash='#/'">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="margin-right:4px;vertical-align:-1px"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
+        首页
+      </button>
+      <button class="nlink" data-page="write" onclick="location.hash='#/write'">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px;vertical-align:-1px"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+        写文章
+      </button>
+      <button class="nlink" data-page="favorites" onclick="location.hash='#/favorites'">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="margin-right:4px;vertical-align:-1px"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+        收藏
+      </button>
+      <button class="nlink" data-page="follows" onclick="location.hash='#/follows'">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="margin-right:4px;vertical-align:-1px"><path d="M16 11c1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3 1.34 3 3 3zm-8 0c1.66 0 3-1.34 3-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>
+        关注
+      </button>
+      <button class="nlink" data-page="drafts" onclick="location.hash='#/drafts'">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px;vertical-align:-1px"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        草稿
+      </button>
+    </div>
+
+    <div class="nav-r">
+      <!-- Theme toggle -->
+      <button class="theme-btn" id="theme-btn" title="切换主题">
+        <svg viewBox="0 0 24 24" fill="currentColor">
+          <path d="M12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6 6 2.69 6 6-2.69 6-6 6zm0-10c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zM11 1h2v3h-2zm0 19h2v3h-2zM3.515 4.929l1.414-1.414L7.05 5.636 5.636 7.05zM16.95 18.364l1.414-1.414 2.121 2.121-1.414 1.414zM1 11h3v2H1zm19 0h3v2h-3zM3.515 19.071l2.121-2.121 1.414 1.414-2.121 2.121zM16.95 5.636l2.121-2.121 1.414 1.414-2.121 2.121z"/>
+        </svg>
+      </button>
+
+      <!-- Auth buttons (logged out) -->
+      <div id="auth-box" style="display:flex;gap:8px">
+        <button class="btn btn-ghost btn-sm" onclick="location.hash='#/login'">登录</button>
+        <button class="btn btn-primary btn-sm" onclick="location.hash='#/register'">注册</button>
+      </div>
+
+      <!-- Notification bell -->
+      <div class="nav-bell" id="nav-bell" onclick="location.hash='#/notifications'" style="position:relative;cursor:pointer;display:none" title="通知">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--t2);vertical-align:middle;display:block"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+        <span class="notif-badge" id="notif-badge" style="display:none"></span>
+      </div>
+
+      <!-- User menu (logged in) -->
+      <div id="user-box" class="dd" style="display:none">
+        <div id="avatar-trigger" style="cursor:pointer;display:flex;align-items:center;gap:8px">
+          <div class="avatar-sm" id="user-avatar">
+            <span id="avatar-text">U</span>
+          </div>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="color:var(--t2)"><path d="M7 10l5 5 5-5H7z"/></svg>
+        </div>
+        <div class="dd-menu" id="user-menu">
+          <button class="dd-item" onclick="location.hash='#/my-profile';document.getElementById('user-menu').classList.remove('open')">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+            个人主页
+          </button>
+          <button class="dd-item" onclick="location.hash='#/write';document.getElementById('user-menu').classList.remove('open')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+            写文章
+          </button>
+          <button class="dd-item" onclick="location.hash='#/drafts';document.getElementById('user-menu').classList.remove('open')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            草稿箱
+          </button>
+          <button class="dd-item" id="admin-nav" style="display:none" onclick="location.hash='#/admin';document.getElementById('user-menu').classList.remove('open')">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
+            管理后台
+          </button>
+          <div class="dd-sep"></div>
+          <button class="dd-item" style="color:var(--err)" onclick="logout()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+            退出登录
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</nav>
+
+<!-- Toast container -->
+<div id="toast"></div>
+
+<!-- App container -->
+<div id="app">
+  <div class="page" id="home"></div>
+  <div class="page" id="login"></div>
+</div>
+
+<!-- Scripts -->
+<script>
+  // Marked config
+  marked.setOptions({ breaks: true, gfm: true });
+</script>
+<script src="js/app.js"></script>
+<script src="js/pages.js"></script>
+<script src="js/pages2.js"></script>
+<script src="js/pages3.js"></script>
+<script>
+  // Show admin nav if admin
+  document.addEventListener('DOMContentLoaded', async () => {
+    // Wait for user to be loaded
+    setTimeout(() => {
+      if (currentUser && currentUser.role === 'admin') {
+        const adminNav = document.getElementById('admin-nav');
+        if (adminNav) adminNav.style.display = 'flex';
+      }
+    }, 500);
+  });
+</script>
+
+</body>
+</html>

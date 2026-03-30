@@ -1,0 +1,13 @@
+{
+  "name": "glass-blog",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.6",
+    "express": "^5.2.1",
+    "sql.js": "^1.11.0"
+  }
+}
