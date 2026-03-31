@@ -2,7 +2,7 @@
  * src/routes/comments.js - 评论
  */
 const { randomUUID } = require('crypto');
-const { q1, qa, run, saveDB, ok, fail, getBan, notify } = require('../db');
+const { q1, qa, run, saveDB, ok, fail, getBan, notify, now } = require('../db');
 const { requireAuth } = require('../middleware/auth');
 
 function setupCommentRoutes(app) {
@@ -28,8 +28,7 @@ function setupCommentRoutes(app) {
     const ban = getBan(req.user.id);
     if (ban) return fail(res, `你已被封禁，无法评论`, 403);
     const id = randomUUID();
-    const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
-    run('INSERT INTO comments VALUES (?,?,?,?,?,?)', [id, req.params.id, req.user.id, content.trim(), parent_id || null, now]);
+    run('INSERT INTO comments VALUES (?,?,?,?,?,?)', [id, req.params.id, req.user.id, content.trim(), parent_id || null, now()]);
     saveDB();
     const postAuthor = q1('SELECT user_id FROM posts WHERE id=?', [req.params.id]);
     if (postAuthor && postAuthor.user_id !== req.user.id) notify(postAuthor.user_id, req.user.id, 'comment', req.params.id);

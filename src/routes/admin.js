@@ -2,7 +2,7 @@
  * src/routes/admin.js - 管理后台（统计、用户/文章/评论管理、审核、审计日志）
  */
 const { randomUUID } = require('crypto');
-const { q1, qa, run, saveDB, ok, fail, logAudit, notify, getBan } = require('../db');
+const { q1, qa, run, saveDB, ok, fail, logAudit, notify, getBan, now } = require('../db');
 const { requireAuth, requireAdmin } = require('../middleware/auth');
 
 function setupAdminRoutes(app) {
@@ -11,9 +11,10 @@ function setupAdminRoutes(app) {
     const totalPosts = q1('SELECT COUNT(*) as c FROM posts')?.c || 0;
     const totalUsers = q1('SELECT COUNT(*) as c FROM users')?.c || 0;
     const totalComments = q1('SELECT COUNT(*) as c FROM comments')?.c || 0;
-    const totalBans = q1("SELECT COUNT(*) as c FROM bans WHERE banned_until > datetime('now','localtime')")?.c || 0;
-    const todayPosts = q1("SELECT COUNT(*) as c FROM posts WHERE date(created_at)=date('now','localtime')")?.c || 0;
-    const todayComments = q1("SELECT COUNT(*) as c FROM comments WHERE date(created_at)=date('now','localtime')")?.c || 0;
+    const todayStr = now().slice(0, 10);
+    const totalBans = q1('SELECT COUNT(*) as c FROM bans WHERE banned_until > ?', [now()])?.c || 0;
+    const todayPosts = q1('SELECT COUNT(*) as c FROM posts WHERE date(created_at)=?', [todayStr])?.c || 0;
+    const todayComments = q1('SELECT COUNT(*) as c FROM comments WHERE date(created_at)=?', [todayStr])?.c || 0;
     const recentPosts = qa('SELECT p.id,p.title,p.created_at,u.name as author FROM posts p JOIN users u ON p.user_id=u.id ORDER BY p.created_at DESC LIMIT 5');
     const recentComments = qa('SELECT c.content,c.created_at,u.name as author FROM comments c JOIN users u ON c.user_id=u.id ORDER BY c.created_at DESC LIMIT 5');
     ok(res, { data: { totalPosts, totalUsers, totalComments, totalBans, todayPosts, todayComments, recentPosts, recentComments } });
@@ -22,22 +23,23 @@ function setupAdminRoutes(app) {
   // ===================== 数据分析 =====================
   app.get('/api/admin/analytics', requireAuth, requireAdmin, (req, res) => {
     const days = Math.min(parseInt(req.query.days) || 7, 30);
+    const cutoffDate = new Date(Date.now() - days * 86400000);
+    const pad = n => String(n).padStart(2, '0');
+    const cutoffStr = `${cutoffDate.getFullYear()}-${pad(cutoffDate.getMonth()+1)}-${pad(cutoffDate.getDate())} ${pad(cutoffDate.getHours())}:${pad(cutoffDate.getMinutes())}:${pad(cutoffDate.getSeconds())}`;
+    
     const rows = qa(`
       SELECT date(created_at) as day,
         COUNT(DISTINCT CASE WHEN table_name='users' THEN row_id END) as new_users,
         COUNT(DISTINCT CASE WHEN table_name='posts' THEN row_id END) as new_posts,
         COUNT(DISTINCT CASE WHEN table_name='comments' THEN row_id END) as new_comments
       FROM (
-        SELECT 'users' as table_name, id as row_id, created_at FROM users
-          WHERE created_at >= datetime('now','localtime','-${days} days')
+        SELECT 'users' as table_name, id as row_id, created_at FROM users WHERE created_at >= ?
         UNION ALL
-        SELECT 'posts', id, created_at FROM posts
-          WHERE created_at >= datetime('now','localtime','-${days} days')
+        SELECT 'posts', id, created_at FROM posts WHERE created_at >= ?
         UNION ALL
-        SELECT 'comments', id, created_at FROM comments
-          WHERE created_at >= datetime('now','localtime','-${days} days')
+        SELECT 'comments', id, created_at FROM comments WHERE created_at >= ?
       ) GROUP BY day ORDER BY day
-    `);
+    `, [cutoffStr, cutoffStr, cutoffStr]);
     const popularPosts = qa(`
       SELECT p.id, p.title, p.views, p.likes, u.name as author,
         (SELECT COUNT(*) FROM comments c WHERE c.post_id=p.id) as comment_count
@@ -69,7 +71,9 @@ function setupAdminRoutes(app) {
     if (user.role === 'admin') return fail(res, '无法封禁管理员');
     const { reason, duration = 30 } = req.body;
     if (!reason) return fail(res, '请填写封禁原因');
-    const until = new Date(Date.now() + parseInt(duration) * 86400000).toISOString().replace('T', ' ').slice(0, 19);
+    const futureDate = new Date(Date.now() + parseInt(duration) * 86400000);
+    const pad = n => String(n).padStart(2, '0');
+    const until = `${futureDate.getFullYear()}-${pad(futureDate.getMonth()+1)}-${pad(futureDate.getDate())} ${pad(futureDate.getHours())}:${pad(futureDate.getMinutes())}:${pad(futureDate.getSeconds())}`;
     run('INSERT OR REPLACE INTO bans (user_id, reason, banned_until) VALUES (?,?,?)', [user.id, reason, until]);
     logAudit(req.user.id, 'ban_user', user.id, `${user.name}: ${reason} (${duration}天)`);
     saveDB();

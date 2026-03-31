@@ -8,6 +8,13 @@ const initSqlJs = require('sql.js');
 const DB_PATH = path.join(__dirname, '..', 'blog.db');
 let db;
 
+/** 获取当前本地时间字符串，格式 YYYY-MM-DD HH:MM:SS */
+function now() {
+  const d = new Date();
+  const pad = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+
 // ===================== DATABASE INIT =====================
 async function initDB() {
   const SQL = await initSqlJs();
@@ -167,7 +174,7 @@ async function initDB() {
   it.free();
 
   // Seed posts
-  const ip = db.prepare('INSERT INTO posts VALUES (?,?,?,?,?,?,?,?,?,?,?)');
+  const ip = db.prepare('INSERT INTO posts (id,user_id,title,summary,content,cover,status,likes,views,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)');
   const ipt = db.prepare('INSERT INTO post_tags VALUES (?,?)');
   const posts = [
     ['p1','u2','初学者指南：从零开始的 JavaScript 之旅','JavaScript 是现代 Web 开发的基石。本文将带你从变量声明、数据类型出发，逐步深入函数、异步编程与 ES6+ 新特性。',
@@ -368,8 +375,8 @@ interface User {
   ic.free();
 
   // Seed follows
-  const ifl = db.prepare('INSERT OR IGNORE INTO follows VALUES (?,?,datetime("now","localtime"))');
-  ifl.run(['u2','u3']); ifl.run(['u3','u2']); ifl.run(['u3','u1']);
+  const ifl = db.prepare('INSERT OR IGNORE INTO follows VALUES (?,?,?)');
+  ifl.run(['u2','u3', now()]); ifl.run(['u3','u2', now()]); ifl.run(['u3','u1', now()]);
   ifl.free();
 
   saveDB();
@@ -412,11 +419,11 @@ function notify(userId, fromUserId, type, postId = '') {
 }
 
 function getBan(userId) {
-  return q1("SELECT * FROM bans WHERE user_id = ? AND banned_until > datetime('now','localtime')", [userId]);
+  return q1('SELECT * FROM bans WHERE user_id = ? AND banned_until > ?', [userId, now()]);
 }
 
 function logAudit(userId, action, target = '', detail = '') {
   run('INSERT INTO audit_log (user_id,action,target,detail) VALUES (?,?,?,?)', [userId, action, target, detail]);
 }
 
-module.exports = { initDB, saveDB, db: () => db, q1, qa, run, ok, fail, notify, getBan, logAudit };
+module.exports = { initDB, saveDB, db: () => db, q1, qa, run, ok, fail, notify, getBan, logAudit, now };

@@ -86,7 +86,7 @@ function setupUserRoutes(app) {
       saveDB();
       ok(res, { message: '已取消关注', following: false });
     } else {
-      run('INSERT INTO follows VALUES (?,?,datetime("now","localtime"))', [req.user.id, req.params.id]);
+      run('INSERT INTO follows VALUES (?,?,?)', [req.user.id, req.params.id, now()]);
       saveDB();
       notify(req.params.id, req.user.id, 'follow');
       ok(res, { message: '已关注', following: true });

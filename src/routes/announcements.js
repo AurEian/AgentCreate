@@ -2,7 +2,7 @@
  * src/routes/announcements.js - 系统公告
  */
 const { randomUUID } = require('crypto');
-const { q1, qa, run, saveDB, ok, fail, logAudit } = require('../db');
+const { q1, qa, run, saveDB, ok, fail, logAudit, now } = require('../db');
 const { requireAuth, requireAdmin } = require('../middleware/auth');
 
 function setupAnnouncementRoutes(app) {
@@ -15,8 +15,7 @@ function setupAnnouncementRoutes(app) {
     const { title, content } = req.body;
     if (!title || !content) return fail(res, '标题和内容不能为空');
     const id = randomUUID();
-    const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
-    run('INSERT INTO announcements VALUES (?,?,?,?,?)', [id, req.user.id, title.trim(), content.trim(), now]);
+    run('INSERT INTO announcements VALUES (?,?,?,?,?)', [id, req.user.id, title.trim(), content.trim(), now()]);
     logAudit(req.user.id, 'create_announcement', id, title);
     saveDB();
     ok(res, { message: '公告发布成功' });

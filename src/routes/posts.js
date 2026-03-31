@@ -2,7 +2,7 @@
  * src/routes/posts.js - 文章 CRUD、草稿、标签、搜索、关于
  */
 const { randomUUID } = require('crypto');
-const { q1, qa, run, saveDB, ok, fail, getBan, logAudit, notify } = require('../db');
+const { q1, qa, run, saveDB, ok, fail, getBan, logAudit, notify, now } = require('../db');
 const { requireAuth } = require('../middleware/auth');
 
 function setupPostRoutes(app) {
@@ -49,9 +49,8 @@ function setupPostRoutes(app) {
     const { title, summary, content, tags = [], cover = '' } = req.body;
     if (!title || !content) return fail(res, '标题和内容不能为空');
     const id = randomUUID();
-    const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
     const status = req.user.role === 'admin' ? 'published' : 'pending';
-    run('INSERT INTO posts VALUES (?,?,?,?,?,?,?,?,?,?,?)', [id, req.user.id, title.trim(), (summary || '').trim(), content, cover, status, 0, 0, now, now]);
+    run('INSERT INTO posts VALUES (?,?,?,?,?,?,?,?,?,?,?)', [id, req.user.id, title.trim(), (summary || '').trim(), content, cover, status, 0, 0, now(), now()]);
     for (const tagName of tags) {
       let existing = q1('SELECT id FROM tags WHERE name = ?', [tagName]);
       if (!existing) { const tid = randomUUID(); run('INSERT INTO tags VALUES (?,?)', [tid, tagName]); existing = { id: tid }; }
@@ -72,7 +71,6 @@ function setupPostRoutes(app) {
     if (!post) return fail(res, '文章不存在', 404);
     if (post.user_id !== req.user.id && req.user.role !== 'admin') return fail(res, '无权编辑此文章', 403);
     const { title, summary, content, tags, cover } = req.body;
-    const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
 
     // 非管理员修改已发布/已拒绝文章 → pending 机制
     if (req.user.role !== 'admin' && (post.status === 'published' || post.status === 'rejected')) {
@@ -82,7 +80,7 @@ function setupPostRoutes(app) {
       const newCover = cover || null;
       const newTags = tags ? JSON.stringify(tags) : '';
       run('UPDATE posts SET pending_title=?, pending_summary=?, pending_content=?, pending_cover=?, pending_tags=?, status=?, updated_at=? WHERE id=?',
-        [newTitle, newSummary, newContent, newCover, newTags, 'published', now, req.params.id]);
+        [newTitle, newSummary, newContent, newCover, newTags, 'published', now(), req.params.id]);
       const admins = qa('SELECT id FROM users WHERE role="admin"');
       admins.forEach(a => notify(a.id, req.user.id, 'review', req.params.id));
       logAudit(req.user.id, 'edit_post', req.params.id, newTitle);
@@ -92,7 +90,7 @@ function setupPostRoutes(app) {
 
     // 管理员或修改草稿/pending文章 → 直接覆盖
     if (title !== undefined) run('UPDATE posts SET title=?, summary=?, content=?, updated_at=?, cover=COALESCE(?,cover) WHERE id=?',
-      [title.trim(), summary !== undefined ? (summary || '').trim() : post.summary, content || post.content, now, cover || null, req.params.id]);
+      [title.trim(), summary !== undefined ? (summary || '').trim() : post.summary, content || post.content, now(), cover || null, req.params.id]);
     if (tags) {
       run('DELETE FROM post_tags WHERE post_id = ?', [req.params.id]);
       for (const tagName of tags) {
@@ -161,7 +159,7 @@ function setupPostRoutes(app) {
       saveDB();
       ok(res, { favorited: false });
     } else {
-      run('INSERT INTO favorites VALUES (?,?,datetime("now","localtime"))', [req.user.id, req.params.id]);
+      run('INSERT INTO favorites VALUES (?,?,?)', [req.user.id, req.params.id, now()]);
       saveDB();
       const postAuthor = q1('SELECT user_id FROM posts WHERE id=?', [req.params.id]);
       if (postAuthor && postAuthor.user_id !== req.user.id) notify(postAuthor.user_id, req.user.id, 'favorite', req.params.id);
@@ -179,8 +177,7 @@ function setupPostRoutes(app) {
   app.post('/api/drafts', requireAuth, (req, res) => {
     const { title = '', summary = '', content = '', tags = [] } = req.body;
     const id = randomUUID();
-    const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
-    run('INSERT INTO drafts VALUES (?,?,?,?,?,?,?)', [id, req.user.id, title, summary, content, JSON.stringify(tags), now]);
+    run('INSERT INTO drafts VALUES (?,?,?,?,?,?,?)', [id, req.user.id, title, summary, content, JSON.stringify(tags), now()]);
     saveDB();
     ok(res, { message: '草稿已保存', data: { id } });
   });
@@ -189,9 +186,8 @@ function setupPostRoutes(app) {
     const draft = q1('SELECT * FROM drafts WHERE id=? AND user_id=?', [req.params.id, req.user.id]);
     if (!draft) return fail(res, '草稿不存在', 404);
     const { title, summary, content, tags } = req.body;
-    const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
     run('UPDATE drafts SET title=?, summary=?, content=?, tags=?, updated_at=? WHERE id=?',
-      [title || '', summary || '', content || '', JSON.stringify(tags || []), now, req.params.id]);
+      [title || '', summary || '', content || '', JSON.stringify(tags || []), now(), req.params.id]);
     saveDB();
     ok(res, { message: '草稿已更新' });
   });

@@ -32,8 +32,8 @@ function renderLogin() {
     const pwd = document.getElementById('login-pwd').value;
     try {
       const res = await API.login(email, pwd);
-      if (res.error) {
-        UI.showToast(res.error, 'err');
+      if (!res.success) {
+        UI.showToast(res.message || '登录失败', 'err');
       } else {
         sessionStorage.setItem('token', res.token);
         currentUser = res.user;

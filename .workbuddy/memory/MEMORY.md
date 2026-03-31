@@ -82,6 +82,11 @@
    - 编辑文章时优先加载 pending 内容（待审核的新版本）
    - `GET /api/admin/posts` 新增 `has_pending_edit` 字段
 
+### Bug 修复记录（2026-03-30 登录）
+42. 登录失败无提示：后端 `fail` 返回 `{ success: false, message }`，但前端判断的是 `res.error`（undefined）→ 改为 `!res.success` 并用 `res.message` 显示错误
+43. 后端登录接口拆分错误提示：先查邮箱是否存在（"该账号不存在"），再校验密码（"密码错误"）
+44. 账号不存在时前端弹出毛玻璃确认框，询问是否跳转注册页面
+
 ### Bug 修复记录（2026-03-30 管理后台）
 17. pages3.js 第594行 `reviewPost` 函数后多了一个 `}` → 已删除，修复 SyntaxError，管理后台恢复正常加载
 
