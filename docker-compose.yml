@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  glass-blog:
+    build: .
+    image: glass-blog:1.0
+    container_name: glass-blog
+    ports:
+      - "3000:3000"
+    volumes:
+      # 持久化数据库和上传文件
+      - ./data:/app/data
+      - ./uploads:/app/public/uploads
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
