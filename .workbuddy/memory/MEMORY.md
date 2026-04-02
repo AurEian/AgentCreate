@@ -166,6 +166,14 @@
     └── uploads/           ← 用户上传文件（头像/封面）
 ```
 
+### Docker 部署（2026-04-02 完成）
+- **Dockerfile**：基于 `node:20-alpine`，多层缓存构建，创建 `public/uploads` 和 `data` 目录
+- **docker-compose.yml**：挂载 `./data:/app/data`（数据库）和 `./uploads:/app/public/uploads`（上传），环境变量 `DB_PATH=/app/data/blog.db`
+- **数据库路径**：`src/db.js` 支持 `process.env.DB_PATH`，本地开发回退到项目根 `blog.db`
+- **CentOS 7 部署**：安装 Docker CE（阿里源）+ docker-compose v2，`git clone` + `docker-compose up -d --build`，开放 3000 端口
+- **已测试**：容器启动后 `/app/data/blog.db` 正确生成，数据持久化验证通过
+- **GitHub**：代码已推送，SSH 方式认证（密钥：`~/.ssh/id_ed25519`，公钥已加到 GitHub）
+
 ### 注意事项
 - Express 5 路由用 `/{*splat}` 而非 `*`
 - sql.js 只接受数组参数

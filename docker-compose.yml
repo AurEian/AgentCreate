@@ -1,19 +1,29 @@
 version: '3.8'
 
 services:
+  # Node.js 应用（不再直接暴露端口，通过 nginx 代理）
   glass-blog:
     build: .
     image: glass-blog:1.0
     container_name: glass-blog
-    ports:
-      - "3000:3000"
+    expose:
+      - "3000"
     volumes:
-      # 数据库持久化：服务器 ./data/blog.db ↔ 容器内 /app/data/blog.db
       - ./data:/app/data
-      # 用户上传文件持久化：服务器 ./uploads ↔ 容器内 /app/public/uploads
       - ./uploads:/app/public/uploads
     environment:
       - NODE_ENV=production
-      # 告诉应用把数据库存在 /app/data 目录（对应宿主机 ./data）
       - DB_PATH=/app/data/blog.db
+    restart: unless-stopped
+
+  # Nginx 反向代理（对外暴露 80 端口）
+  nginx:
+    image: nginx:alpine
+    container_name: glass-blog-nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - glass-blog
     restart: unless-stopped
