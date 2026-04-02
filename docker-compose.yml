@@ -8,9 +8,12 @@ services:
     ports:
       - "3000:3000"
     volumes:
-      # 持久化数据库和上传文件
+      # 数据库持久化：服务器 ./data/blog.db ↔ 容器内 /app/data/blog.db
       - ./data:/app/data
+      # 用户上传文件持久化：服务器 ./uploads ↔ 容器内 /app/public/uploads
       - ./uploads:/app/public/uploads
-    restart: unless-stopped
     environment:
       - NODE_ENV=production
+      # 告诉应用把数据库存在 /app/data 目录（对应宿主机 ./data）
+      - DB_PATH=/app/data/blog.db
+    restart: unless-stopped

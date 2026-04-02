@@ -13,8 +13,8 @@ RUN npm install --production
 # 复制项目代码
 COPY . .
 
-# 创建上传目录
-RUN mkdir -p public/uploads
+# 创建必要目录（上传文件 + 数据库存储）
+RUN mkdir -p public/uploads data
 
 # 暴露端口
 EXPOSE 3000

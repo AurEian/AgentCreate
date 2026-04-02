@@ -5,7 +5,8 @@ const fs = require('fs');
 const path = require('path');
 const initSqlJs = require('sql.js');
 
-const DB_PATH = path.join(__dirname, '..', 'blog.db');
+// 支持环境变量覆盖路径（Docker 部署时用 /app/data/blog.db）
+const DB_PATH = process.env.DB_PATH || path.join(__dirname, '..', 'blog.db');
 let db;
 
 /** 获取当前本地时间字符串，格式 YYYY-MM-DD HH:MM:SS */
