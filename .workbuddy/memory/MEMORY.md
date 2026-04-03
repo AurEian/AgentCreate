@@ -168,10 +168,11 @@
 
 ### Docker 部署（2026-04-02 完成）
 - **Dockerfile**：基于 `node:20-alpine`，多层缓存构建，创建 `public/uploads` 和 `data` 目录
+- **Nginx 反向代理**（2026-04-02）：`nginx.conf` + `docker-compose.yml` 新增 `glass-blog-nginx` 容器，监听 80 端口转发到 Node.js 3000，两个容器同 bridge 网络通信
 - **docker-compose.yml**：挂载 `./data:/app/data`（数据库）和 `./uploads:/app/public/uploads`（上传），环境变量 `DB_PATH=/app/data/blog.db`
 - **数据库路径**：`src/db.js` 支持 `process.env.DB_PATH`，本地开发回退到项目根 `blog.db`
-- **CentOS 7 部署**：安装 Docker CE（阿里源）+ docker-compose v2，`git clone` + `docker-compose up -d --build`，开放 3000 端口
-- **已测试**：容器启动后 `/app/data/blog.db` 正确生成，数据持久化验证通过
+- **CentOS 7 部署**：安装 Docker CE（阿里源）+ docker-compose v2，`git clone` + `docker-compose up -d --build`，开放 80 端口
+- **已测试**：本地 docker-compose up 验证通过，Nginx 80 端口正常代理到 Node.js，数据库持久化正常
 - **GitHub**：代码已推送，SSH 方式认证（密钥：`~/.ssh/id_ed25519`，公钥已加到 GitHub）
 
 ### 注意事项

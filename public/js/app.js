@@ -1,5 +1,6 @@
 // ============ API & STATE ============
-const API_BASE = 'http://localhost:3000/api';
+// 用相对路径，自动适配本地开发(:3000)和生产环境(nginx :80)
+const API_BASE = '/api';
 let currentUser = null;
 let userCache = {};
 let postCache = {};
