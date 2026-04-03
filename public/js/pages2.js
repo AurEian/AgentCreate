@@ -305,16 +305,17 @@ async function publishPost(editId) {
       res = await API.createPost(title, summary, content, currentTags, coverDataUrl);
     }
     
-    if (res.error) {
-      UI.showToast(res.error, 'err');
+    if (!res.success) {
+      UI.showToast(res.message || res.error || '操作失败', 'err');
       return;
     }
     
     clearTimeout(autoSaveTimer);
     clearSessionDraft();
     
-    const postId = res.id || editId;
-    const status = res.status;
+    const newPost = res.data;
+    const postId = newPost.id || editId;
+    const status = newPost.status;
     
     if (editId) {
       // 编辑模式
