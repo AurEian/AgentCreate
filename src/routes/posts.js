@@ -5,6 +5,22 @@ const { randomUUID } = require('crypto');
 const { q1, qa, run, saveDB, ok, fail, getBan, logAudit, notify, now } = require('../db');
 const { requireAuth } = require('../middleware/auth');
 
+// 从数据库加载敏感词
+function getSensitiveWords() {
+  return qa('SELECT word FROM sensitive_words').map(r => r.word);
+}
+
+// 检查敏感词
+function checkSensitiveWords(text) {
+  if (!text) return null;
+  const words = getSensitiveWords();
+  const lower = text.toLowerCase();
+  for (const word of words) {
+    if (lower.includes(word)) return word;
+  }
+  return null;
+}
+
 function setupPostRoutes(app) {
   // 获取文章列表（支持分页、标签筛选、搜索、按用户筛选）
   app.get('/api/posts', (req, res) => {
@@ -42,15 +58,34 @@ function setupPostRoutes(app) {
     ok(res, { data: { ...post, tags: tRows.map(t => t.name), commentCount } });
   });
 
-  // 创建文章
+  // 创建文章（带敏感词自动过滤）
   app.post('/api/posts', requireAuth, (req, res) => {
     const ban = getBan(req.user.id);
     if (ban) return fail(res, `你已被封禁，无法发布文章。原因：${ban.reason}`, 403);
     const { title, summary, content, tags = [], cover = '' } = req.body;
     if (!title || !content) return fail(res, '标题和内容不能为空');
+
+    // 检查敏感词
+    const fullText = `${title} ${summary || ''} ${content}`;
+    const matchedWord = checkSensitiveWords(fullText);
+    let status = 'pending'; // 默认待审核
+    let message = '文章已提交审核';
+
+    // 管理员直接发布，用户文章如果无敏感词则直接发布
+    if (req.user.role === 'admin') {
+      status = 'published';
+      message = '文章发布成功';
+    } else if (!matchedWord) {
+      // 无敏感词直接通过
+      status = 'published';
+      message = '文章发布成功';
+    } else {
+      // 有敏感词，标记为待审核并通知管理员
+      message = '文章含敏感内容，已提交审核';
+    }
+
     const id = randomUUID();
-    const status = req.user.role === 'admin' ? 'published' : 'pending';
-    run('INSERT INTO posts VALUES (?,?,?,?,?,?,?,?,?,?,?)', [id, req.user.id, title.trim(), (summary || '').trim(), content, cover, status, 0, 0, now(), now()]);
+    run('INSERT INTO posts VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)', [id, req.user.id, title.trim(), (summary || '').trim(), content, cover, status, 0, 0, now(), now(), '', '', '', '', '']);
     for (const tagName of tags) {
       let existing = q1('SELECT id FROM tags WHERE name = ?', [tagName]);
       if (!existing) { const tid = randomUUID(); run('INSERT INTO tags VALUES (?,?)', [tid, tagName]); existing = { id: tid }; }
@@ -62,7 +97,7 @@ function setupPostRoutes(app) {
       admins.forEach(a => notify(a.id, req.user.id, 'review', id));
     }
     saveDB();
-    ok(res, { message: status === 'pending' ? '文章已提交审核' : '文章发布成功', data: { id, title, status } });
+    ok(res, { message, data: { id, title, status }, matchedWord });
   });
 
   // 更新文章
@@ -98,6 +133,10 @@ function setupPostRoutes(app) {
         if (!existing) { const tid = randomUUID(); run('INSERT INTO tags VALUES (?,?)', [tid, tagName]); existing = { id: tid }; }
         run('INSERT OR IGNORE INTO post_tags VALUES (?,?)', [req.params.id, existing.id]);
       }
+    }
+    // 如果是管理员修改他人文章，通知作者
+    if (req.user.role === 'admin' && post.user_id !== req.user.id) {
+      notify(post.user_id, req.user.id, 'admin_edit', req.params.id);
     }
     logAudit(req.user.id, 'edit_post', req.params.id, title || '');
     saveDB();
@@ -169,17 +208,45 @@ function setupPostRoutes(app) {
 
   // ===================== 草稿 =====================
   app.get('/api/drafts', requireAuth, (req, res) => {
-    const rows = qa('SELECT * FROM drafts WHERE user_id=? ORDER BY updated_at DESC', [req.user.id]);
-    rows.forEach(r => { try { r.tags = JSON.parse(r.tags || '[]'); } catch { r.tags = []; } });
-    ok(res, { data: rows });
+    // 每篇文章只保留最新草稿：按 post_id 分组取最新
+    const rows = qa(`
+      SELECT d.* FROM drafts d
+      LEFT JOIN posts p ON d.post_id = p.id
+      WHERE d.user_id=? 
+      ORDER BY d.updated_at DESC
+    `, [req.user.id]);
+    // 按 post_id 去重，保留最新
+    const seen = new Set();
+    const deduped = [];
+    rows.forEach(r => {
+      if (!r.post_id) {
+        deduped.push(r); // 无文章关联的独立草稿保留
+      } else if (!seen.has(r.post_id)) {
+        seen.add(r.post_id);
+        deduped.push(r);
+      }
+    });
+    deduped.forEach(r => { try { r.tags = JSON.parse(r.tags || '[]'); } catch { r.tags = []; } });
+    ok(res, { data: deduped });
   });
 
   app.post('/api/drafts', requireAuth, (req, res) => {
-    const { title = '', summary = '', content = '', tags = [] } = req.body;
-    const id = randomUUID();
-    run('INSERT INTO drafts VALUES (?,?,?,?,?,?,?)', [id, req.user.id, title, summary, content, JSON.stringify(tags), now()]);
-    saveDB();
-    ok(res, { message: '草稿已保存', data: { id } });
+    const { post_id, title = '', summary = '', content = '', tags = [] } = req.body;
+    // 每篇文章只保留一个草稿：根据 post_id 查找，有则更新、无则创建
+    let draft = post_id ? q1('SELECT id FROM drafts WHERE user_id=? AND post_id=?', [req.user.id, post_id]) : null;
+    if (draft) {
+      // 已有草稿 → 更新
+      run('UPDATE drafts SET title=?, summary=?, content=?, tags=?, updated_at=? WHERE id=?',
+        [title, summary || '', content || '', JSON.stringify(tags || []), now(), draft.id]);
+      saveDB();
+      ok(res, { message: '草稿已更新', data: { id: draft.id, post_id } });
+    } else {
+      // 新建草稿
+      const id = randomUUID();
+      run('INSERT INTO drafts VALUES (?,?,?,?,?,?,?,?)', [id, req.user.id, post_id || null, title, summary, content, JSON.stringify(tags), now()]);
+      saveDB();
+      ok(res, { message: '草稿已保存', data: { id, post_id } });
+    }
   });
 
   app.put('/api/drafts/:id', requireAuth, (req, res) => {
@@ -193,14 +260,20 @@ function setupPostRoutes(app) {
   });
 
   app.delete('/api/drafts/:id', requireAuth, (req, res) => {
-    run('DELETE FROM drafts WHERE id=? AND user_id=?', [req.params.id, req.user.id]);
+    // 支持按草稿id删除 或 按post_id删除
+    if (req.params.id.startsWith('post:')) {
+      const postId = req.params.id.substring(5);
+      run('DELETE FROM drafts WHERE user_id=? AND post_id=?', [req.user.id, postId]);
+    } else {
+      run('DELETE FROM drafts WHERE id=? AND user_id=?', [req.params.id, req.user.id]);
+    }
     saveDB();
     ok(res, { message: '草稿已删除' });
   });
 
   // ===================== 标签 =====================
   app.get('/api/tags', (req, res) => {
-    const rows = qa('SELECT t.id, t.name, COUNT(pt.post_id) as post_count FROM tags t LEFT JOIN post_tags pt ON pt.tag_id=t.id GROUP BY t.id ORDER BY post_count DESC');
+    const rows = qa('SELECT t.id, t.name, COUNT(CASE WHEN p.status="published" THEN 1 END) as post_count FROM tags t LEFT JOIN post_tags pt ON pt.tag_id=t.id LEFT JOIN posts p ON pt.post_id=p.id GROUP BY t.id ORDER BY post_count DESC');
     ok(res, { data: rows });
   });
 

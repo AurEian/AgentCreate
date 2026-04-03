@@ -348,15 +348,19 @@ async function renderAdmin() {
       <div class="tabs">
         <button class="tab active" onclick="switchAdminTab('posts', this)">文章管理</button>
         <button class="tab" onclick="switchAdminTab('users', this)">用户管理</button>
+        <button class="tab" onclick="switchAdminTab('profile-review', this)">资料审核</button>
         <button class="tab" onclick="switchAdminTab('comments', this)">评论管理</button>
         <button class="tab" onclick="switchAdminTab('announcements', this)">系统公告</button>
+        <button class="tab" onclick="switchAdminTab('sensitive', this)">敏感词管理</button>
         <button class="tab" onclick="switchAdminTab('logs', this)">操作日志</button>
       </div>
       
       <div id="admin-tab-posts"></div>
       <div id="admin-tab-users" class="hidden"></div>
+      <div id="admin-tab-profile-review" class="hidden"></div>
       <div id="admin-tab-comments" class="hidden"></div>
       <div id="admin-tab-announcements" class="hidden"></div>
+      <div id="admin-tab-sensitive" class="hidden"></div>
       <div id="admin-tab-logs" class="hidden"></div>
     </div>
   `;
@@ -507,15 +511,17 @@ function switchAdminTab(tab, btn) {
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   btn.classList.add('active');
   
-  ['posts', 'users', 'comments', 'announcements', 'logs'].forEach(t => {
+  ['posts', 'users', 'profile-review', 'comments', 'announcements', 'sensitive', 'logs'].forEach(t => {
     const el = document.getElementById(`admin-tab-${t}`);
     if (el) el.classList.toggle('hidden', t !== tab);
   });
   
   if (tab === 'posts') loadAdminPosts();
   else if (tab === 'users') loadAdminUsers();
+  else if (tab === 'profile-review') loadAdminProfileReview();
   else if (tab === 'comments') loadAdminComments();
   else if (tab === 'announcements') loadAdminAnnouncements();
+  else if (tab === 'sensitive') loadAdminSensitive();
   else if (tab === 'logs') loadAdminLogs();
 }
 
@@ -594,12 +600,14 @@ async function adminDeletePost(id) {
 }
 
 async function reviewPost(id, action) {
-  if (!await UI.showConfirm({
-    title: action === 'approve' ? '通过审核' : '拒绝文章',
-    message: action === 'approve' ? '确定通过此文章的审核吗？审核通过后文章将发布至平台。' : '确定拒绝此文章吗？作者会收到拒绝通知。',
-    confirmText: action === 'approve' ? '确认通过' : '确认拒绝',
-    type: action === 'approve' ? 'info' : 'warn'
-  })) return;
+  // 判断是修改审核还是新文章审核
+  const post = await API.getPost(id);
+  const isModifyReview = !!(post?.pending_title);
+  const title = isModifyReview ? (action === 'approve' ? '通过修改' : '拒绝修改') : (action === 'approve' ? '通过审核' : '拒绝文章');
+  const message = isModifyReview
+    ? (action === 'approve' ? '确定通过此文章的修改吗？修改后的内容将替换原内容正式发布。' : '确定拒绝此修改吗？作者会收到拒绝通知，原内容不变。')
+    : (action === 'approve' ? '确定通过此文章的审核吗？审核通过后文章将发布至平台。' : '确定拒绝此文章吗？作者会收到拒绝通知。');
+  if (!await UI.showConfirm({ title, message, confirmText: action === 'approve' ? '确认通过' : '确认拒绝', type: action === 'approve' ? 'info' : 'warn' })) return;
   try {
     const res = await fetch(`${API_BASE}/admin/posts/${id}/review`, {
       method: 'PUT', headers: jsonH(),
@@ -711,10 +719,214 @@ async function loadAdminComments() {
   }
 }
 
+async function loadAdminProfileReview() {
+  const container = document.getElementById('admin-tab-profile-review');
+  container.innerHTML = '<div class="skeleton skel-line"></div>';
+  
+  try {
+    const profiles = await API.getPendingProfiles();
+    
+    if (!profiles || profiles.length === 0) {
+      container.innerHTML = '<div class="empty"><h3>暂无待审核的资料修改</h3></div>';
+      return;
+    }
+    
+    container.innerHTML = `
+      <div class="tbl-wrap">
+        <table class="tbl">
+          <thead>
+            <tr>
+              <th>用户</th>
+              <th>当前资料</th>
+              <th>修改为</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${profiles.map(p => `
+              <tr>
+                <td>
+                  <div style="display:flex;align-items:center;gap:8px">
+                    ${p.avatar ? `<img src="${p.avatar}" style="width:32px;height:32px;border-radius:50%;object-fit:cover">` : `<div class="avatar avatar-sm">${p.name[0]}</div>`}
+                    <span>${escHtml(p.name)}</span>
+                  </div>
+                </td>
+                <td style="max-width:200px">
+                  <div class="truncate">${escHtml(p.bio || '-')}</div>
+                </td>
+                <td style="max-width:200px">
+                  <div class="truncate" style="color:var(--primary)">${escHtml(p.pending_bio || p.pending_name || '-')}</div>
+                </td>
+                <td>
+                  <div class="tbl-actions">
+                    <button class="btn btn-primary btn-xs" onclick="approveProfile('${p.id}')">通过</button>
+                    <button class="btn btn-danger btn-xs" onclick="rejectProfile('${p.id}')">拒绝</button>
+                  </div>
+                </td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+  } catch {
+    container.innerHTML = '<div class="empty"><h3>加载失败</h3></div>';
+  }
+}
+
+async function approveProfile(userId) {
+  if (!await UI.showConfirm({ title: '通过审核', message: '确认通过此资料修改？', confirmText: '确认通过', type: 'info' })) return;
+  try {
+    await API.reviewProfile(userId, 'approve');
+    UI.showToast('已通过审核', 'ok');
+    loadAdminProfileReview();
+  } catch {
+    UI.showToast('操作失败', 'err');
+  }
+}
+
+async function rejectProfile(userId) {
+  if (!await UI.showConfirm({ title: '拒绝修改', message: '确认拒绝此资料修改？', confirmText: '确认拒绝', type: 'danger' })) return;
+  try {
+    await API.reviewProfile(userId, 'reject');
+    UI.showToast('已拒绝修改', 'ok');
+    loadAdminProfileReview();
+  } catch {
+    UI.showToast('操作失败', 'err');
+  }
+}
+
+// ========== ADMIN: SENSITIVE WORDS ==========
+async function loadAdminSensitive() {
+  const container = document.getElementById('admin-tab-sensitive');
+  container.innerHTML = `
+    <div class="admin-form-card" style="background:var(--glass);border:1px solid var(--glass-b);border-radius:16px;padding:20px;margin-bottom:20px">
+      <h3 style="font-size:15px;font-weight:600;color:var(--t1);margin-bottom:16px;display:flex;align-items:center;gap:8px">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+        添加敏感词
+      </h3>
+      <div style="display:flex;gap:12px;align-items:flex-start">
+        <input type="text" class="form-input" id="sensitive-word" placeholder="输入敏感词" style="flex:1;max-width:280px">
+        <button class="btn btn-primary" onclick="addSensitiveWord()" style="min-width:80px;box-shadow:0 2px 8px rgba(99,102,241,.3)">添加</button>
+      </div>
+      <div style="font-size:12px;color:var(--t3);margin-top:10px">
+        💡 提示：多个敏感词用逗号分隔，一次最多10个
+      </div>
+      
+      <div style="margin-top:20px;padding-top:20px;border-top:1px solid var(--glass-b)">
+        <h4 style="font-size:14px;color:var(--t2);margin-bottom:12px;display:flex;align-items:center;gap:8px">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5l-4 4m0 0l-4-4m4 4V4"/></svg>
+          批量导入
+        </h4>
+        <div style="display:flex;gap:12px;align-items:flex-start">
+          <textarea id="bulk-words" class="form-input" placeholder="每行一个敏感词，或用逗号分隔" rows="4" style="flex:1;resize:vertical;min-width:300px"></textarea>
+          <button class="btn" onclick="bulkImportWords()" style="min-width:100px;background:var(--primary);color:white;border:1px solid rgba(255,255,255,.2);box-shadow:0 2px 8px rgba(99,102,241,.3)">批量导入</button>
+        </div>
+      </div>
+    </div>
+    <div id="sensitive-list"><div class="skeleton skel-line"></div></div>
+  `;
+
+  try {
+    const words = await API.getSensitiveWords();
+    const list = document.getElementById('sensitive-list');
+    if (!words.length) {
+      list.innerHTML = '<div class="empty"><h3>暂无敏感词</h3></div>';
+      return;
+    }
+    list.innerHTML = `
+      <div class="admin-form-card" style="background:var(--glass);border:1px solid var(--glass-b);border-radius:16px;padding:20px">
+        <h3 style="font-size:15px;font-weight:600;color:var(--t1);margin-bottom:16px;display:flex;align-items:center;gap:8px">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#ef4444" stroke-width="2"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/><path d="M9 9l6 6M15 9l-6 6"/></svg>
+          敏感词库（共${words.length}个）
+        </h3>
+        <div style="display:flex;flex-wrap:wrap;gap:10px">
+          ${words.map(w => `
+            <span style="background:rgba(239,68,68,.12);color:#ef4444;padding:6px 12px;border-radius:20px;font-size:13px;display:inline-flex;align-items:center;gap:8px;border:1px solid rgba(239,68,68,.25)">
+              ${escHtml(w.word)}
+              <button onclick="removeSensitiveWord('${w.word}')" style="background:none;border:none;color:inherit;cursor:pointer;padding:0;font-size:15px;line-height:1;opacity:.7" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=.7">×</button>
+            </span>
+          `).join('')}
+        </div>
+      </div>
+    `;
+  } catch {
+    document.getElementById('sensitive-list').innerHTML = '<div class="empty"><h3>加载失败</h3></div>';
+  }
+}
+
+async function addSensitiveWord() {
+  const input = document.getElementById('sensitive-word');
+  const word = input.value.trim();
+  if (!word) return;
+  try {
+    const res = await API.addSensitiveWord(word);
+    if (res.success) {
+      UI.showToast('添加成功', 'ok');
+      input.value = '';
+      loadAdminSensitive();
+    } else {
+      UI.showToast(res.message || '添加失败', 'err');
+    }
+  } catch {
+    UI.showToast('添加失败', 'err');
+  }
+}
+
+async function bulkImportWords() {
+  const textarea = document.getElementById('bulk-words');
+  const text = textarea.value.trim();
+  if (!text) return;
+  const words = text.split(/[\n,，]/).map(w => w.trim()).filter(w => w);
+  let success = 0, fail = 0;
+  for (const w of words) {
+    try {
+      const res = await API.addSensitiveWord(w);
+      if (res.success) success++;
+      else fail++;
+    } catch { fail++; }
+  }
+  UI.showToast(`导入完成：${success}成功，${fail}失败`, fail > 0 ? 'warn' : 'ok');
+  if (success > 0) {
+    textarea.value = '';
+    loadAdminSensitive();
+  }
+}
+
+async function removeSensitiveWord(word) {
+  if (!await UI.showConfirm({ title: '删除敏感词', message: `确认删除「${word}」吗？`, confirmText: '确认删除', type: 'danger' })) return;
+  try {
+    await API.deleteSensitiveWord(word);
+    UI.showToast('已删���', 'ok');
+    loadAdminSensitive();
+  } catch {
+    UI.showToast('删除失败', 'err');
+  }
+}
+
 async function loadAdminLogs() {
   const container = document.getElementById('admin-tab-logs');
   container.innerHTML = '<div class="skeleton skel-line"></div>';
   
+  // 操作类型中文映射
+  const actionMap = {
+    'create_post': '发布文章', 'update_post': '修改文章', 'delete_post': '删除文章',
+    'edit_post': '编辑文章', 'publish_post': '发布文章', 'submit_post': '提交审核', 'review_post': '审核文章',
+    'approve_post': '通过审核', 'reject_post': '拒绝文章',
+    'approve_profile': '通过资料', 'reject_profile': '拒绝资料',
+    'create_comment': '发表评论', 'delete_comment': '删除评论',
+    'admin_delete_comment': '删除评论',
+    'like_post': '点赞文章', 'unlike_post': '取消点赞',
+    'favorite_post': '收藏文章', 'unfavorite_post': '取消收藏',
+    'follow_user': '关注用户', 'unfollow_user': '取消关注',
+    'create_user': '注册用户', 'update_user': '更新资料', 'delete_user': '删除用户',
+    'ban_user': '封禁用户', 'unban_user': '解封用户',
+    'admin_delete_post': '管理员删除文章', 'admin_batch_delete_posts': '批量删除文章',
+    'login': '登录', 'logout': '登出',
+    'create_announcement': '发布公告', 'delete_announcement': '删除公告',
+    'update_profile': '修改资料', 'change_password': '修改密码'
+  };
+
   try {
     const logs = await API.getAdminLogs();
     
@@ -737,7 +949,7 @@ async function loadAdminLogs() {
           <tbody>
             ${logs.map(l => `
               <tr>
-                <td><span class="text-accent">${l.action}</span></td>
+                <td><span class="text-accent">${actionMap[l.action] || l.action}</span></td>
                 <td>${l.target || '-'}</td>
                 <td style="max-width:240px"><div class="truncate text-sm text-muted">${l.detail || ''}</div></td>
                 <td class="text-sm text-dim">${UI.formatDate(l.created_at)}</td>

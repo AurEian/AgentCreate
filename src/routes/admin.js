@@ -88,6 +88,29 @@ function setupAdminRoutes(app) {
     ok(res, { message: '已解封' });
   });
 
+  // ===================== 敏感词管理 =====================
+  app.get('/api/admin/sensitive-words', requireAuth, requireAdmin, (req, res) => {
+    ok(res, { data: qa('SELECT * FROM sensitive_words ORDER BY id') });
+  });
+
+  app.post('/api/admin/sensitive-words', requireAuth, requireAdmin, (req, res) => {
+    const { word } = req.body;
+    if (!word) return fail(res, '请输入敏感词');
+    try {
+      run('INSERT INTO sensitive_words (word) VALUES (?)', [word.trim()]);
+      saveDB();
+      ok(res, { message: '添加成功' });
+    } catch {
+      fail(res, '敏感词已存在');
+    }
+  });
+
+  app.delete('/api/admin/sensitive-words/:word', requireAuth, requireAdmin, (req, res) => {
+    run('DELETE FROM sensitive_words WHERE word = ?', [req.params.word]);
+    saveDB();
+    ok(res, { message: '删除成功' });
+  });
+
   // ===================== 文章管理 =====================
   app.get('/api/admin/posts', requireAuth, requireAdmin, (req, res) => {
     const rows = qa(`SELECT p.id, p.title, p.created_at, p.updated_at, p.status, p.likes, p.views, u.name as author, p.user_id as authorId,
@@ -125,11 +148,12 @@ function setupAdminRoutes(app) {
       saveDB();
       ok(res, { message: '文章已通过审核' });
     } else if (action === 'reject') {
-      run('UPDATE posts SET status="published", pending_title="", pending_summary="", pending_content="", pending_cover="", pending_tags="" WHERE id=?', [req.params.id]);
+      // 拒绝：文章status设为rejected，不再显示在首页
+      run('UPDATE posts SET status="rejected", pending_title="", pending_summary="", pending_content="", pending_cover="", pending_tags="" WHERE id=?', [req.params.id]);
       logAudit(req.user.id, 'reject_post', req.params.id, post.title);
       notify(post.user_id, req.user.id, 'reject', req.params.id);
       saveDB();
-      ok(res, { message: '修改已拒绝，文章保持原版本' });
+      ok(res, { message: '已拒绝，文章从首页隐藏' });
     } else {
       fail(res, '无效操作');
     }
@@ -188,6 +212,35 @@ function setupAdminRoutes(app) {
     const total = q1('SELECT COUNT(*) as c FROM audit_log')?.c || 0;
     const rows = qa(`SELECT a.*, u.name as userName FROM audit_log a LEFT JOIN users u ON a.user_id=u.id ORDER BY a.created_at DESC LIMIT ${l} OFFSET ${offset}`);
     ok(res, { data: rows, pagination: { page: p, limit: l, total } });
+  });
+
+  // 用户资料审核
+  app.get('/api/admin/pending-profiles', requireAuth, requireAdmin, (req, res) => {
+    const rows = qa(`SELECT id, name, pending_name, pending_bio, bio, avatar, created_at FROM users WHERE profile_pending=1`);
+    ok(res, { data: rows });
+  });
+
+  app.post('/api/admin/users/:id/profile-review', requireAuth, requireAdmin, (req, res) => {
+    const user = q1('SELECT * FROM users WHERE id=?', [req.params.id]);
+    if (!user) return fail(res, '用户不存在', 404);
+    const { action } = req.body;
+    if (action === 'approve') {
+      if (user.pending_name) run('UPDATE users SET name=?, pending_name="" WHERE id=?', [user.pending_name, req.params.id]);
+      if (user.pending_bio !== null) run('UPDATE users SET bio=?, pending_bio="" WHERE id=?', [user.pending_bio, req.params.id]);
+      run('UPDATE users SET profile_pending=0 WHERE id=?', [req.params.id]);
+      logAudit(req.user.id, 'approve_profile', req.params.id, user.pending_name || user.name);
+      notify(req.params.id, req.user.id, 'profile_approve', '');
+      saveDB();
+      ok(res, { message: '资料已通过审核' });
+    } else if (action === 'reject') {
+      run('UPDATE users SET pending_name="", pending_bio="", profile_pending=0 WHERE id=?', [req.params.id]);
+      logAudit(req.user.id, 'reject_profile', req.params.id, '');
+      notify(req.params.id, req.user.id, 'profile_reject', '');
+      saveDB();
+      ok(res, { message: '已拒绝修改' });
+    } else {
+      fail(res, '无效操作');
+    }
   });
 }
 

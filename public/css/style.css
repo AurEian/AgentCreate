@@ -6,7 +6,7 @@
   --t1:#f1f5f9;--t2:rgba(241,245,249,.6);--t3:rgba(241,245,249,.35);
   --inp:rgba(255,255,255,.05);--inp-b:rgba(255,255,255,.1);
   --ok:#34d399;--err:#f87171;--warn:#fbbf24;--info:#60a5fa;
-  --mw:900px;
+  --mw:1200px;
   --card-r:18px;
 }
 /* Light theme */
@@ -161,8 +161,11 @@ select.form-input option{background:#1e1b4b;color:var(--t1)}
 .post-card-cover{width:100%;height:160px;overflow:hidden;position:relative;background:linear-gradient(135deg,rgba(99,102,241,.15),rgba(167,139,250,.15))}
 .post-card-cover img{width:100%;height:100%;object-fit:cover;transition:transform .3s ease}
 .post-card:hover .post-card-cover img{transform:scale(1.05)}
-.post-card-img-placeholder{width:100%;height:160px;background:linear-gradient(135deg,rgba(99,102,241,.15),rgba(167,139,250,.15));display:flex;align-items:center;justify-content:center}
-.post-cover-hero{width:100%;max-height:400px;overflow:hidden;margin:16px 0 8px;border-radius:12px;background:linear-gradient(135deg,rgba(99,102,241,.15),rgba(167,139,250,.15))}
+.post-card-img-placeholder{width:100%;height:160px;background:linear-gradient(135deg,rgba(99,102,241,.25) 0%,rgba(167,139,250,.35) 50%,rgba(196,181,253,.2) 100%);display:flex;align-items:center;justify-content:center;position:relative}
+.post-card-img-placeholder::before{content:'';position:absolute;inset:0;background:radial-gradient(circle at 30% 40%,rgba(255,255,255,.1) 0%,transparent 50%),radial-gradient(circle at 70% 80%,rgba(167,139,250,.15) 0%,transparent 40%)}
+.placeholder-icon{position:relative;z-index:1;opacity:.7}
+.post-cover-hero{width:100%;max-height:400px;overflow:hidden;margin:16px 0 8px;border-radius:12px;background:linear-gradient(135deg,rgba(99,102,241,.25) 0%,rgba(167,139,250,.35) 50%,rgba(196,181,253,.2) 100%);position:relative}
+.post-cover-hero::before{content:'';position:absolute;inset:0;background:radial-gradient(circle at 20% 30%,rgba(255,255,255,.12) 0%,transparent 50%),radial-gradient(circle at 80% 70%,rgba(167,139,250,.2) 0%,transparent 40%)}
 .post-cover-hero img{width:100%;max-height:400px;object-fit:cover;display:block}
 .post-card-body{padding:16px}
 .post-card-tags{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px}
@@ -314,13 +317,13 @@ table.tbl tr:hover td{background:rgba(255,255,255,.02);color:var(--t1)}
 .tbl-actions{display:flex;gap:6px}
 
 /* ── Search bar ── */
-.search-wrap{position:relative;max-width:520px;margin:0 auto 28px}
+.search-wrap{position:relative;max-width:720px;margin:0 auto 28px}
 .search-input{width:100%;padding:12px 18px 12px 46px;background:var(--glass);border:1px solid var(--glass-b);border-radius:14px;color:var(--t1);font-size:14px;outline:none;transition:.2s}
 .search-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(167,139,250,.15)}
 .search-icon{position:absolute;left:15px;top:50%;transform:translateY(-50%);color:var(--t3);pointer-events:none;width:18px;height:18px}
 
 /* ── Tag bar ── */
-.tag-bar{display:none;flex-wrap:wrap;gap:8px;max-width:720px;margin:0 auto 24px;padding:0 4px}
+.tag-bar{display:none;flex-wrap:wrap;gap:8px;max-width:1000px;margin:0 auto 24px;padding:0 4px}
 .tag-pill{display:inline-flex;align-items:center;gap:5px;padding:6px 14px;background:var(--glass);border:1px solid var(--glass-b);border-radius:20px;color:var(--t2);font-size:13px;cursor:pointer;transition:.2s;white-space:nowrap;user-select:none}
 .tag-pill:hover{background:rgba(167,139,250,.12);border-color:rgba(167,139,250,.3);color:var(--t1)}
 .tag-pill.active{background:rgba(167,139,250,.2);border-color:var(--accent);color:var(--accent);font-weight:600}
@@ -398,9 +401,9 @@ table.tbl tr:hover td{background:rgba(255,255,255,.02);color:var(--t1)}
 .notif-item.unread{background:rgba(167,139,250,.06);border-color:rgba(167,139,250,.15)}
 .notif-icon{width:36px;height:36px;border-radius:10px;background:rgba(255,255,255,.05);display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0}
 .notif-body{flex:1;min-width:0}
-.notif-main{font-size:13px;color:var(--t2);line-height:1.5}
-.notif-main strong{color:var(--t1)}
-.notif-time{font-size:11px;color:var(--t3);margin-top:2px}
+.notif-main{font-size:13px;color:#c9cad0;line-height:1.5}
+.notif-main strong{color:#e5e5ea}
+.notif-time{font-size:11px;color:#8a8a95;margin-top:2px}
 .notif-dot{width:8px;height:8px;border-radius:50%;background:var(--accent);flex-shrink:0}
 
 /* ── Announcement banner ── */

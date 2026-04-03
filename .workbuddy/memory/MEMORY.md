@@ -171,7 +171,17 @@
 - **Nginx 反向代理**（2026-04-02）：`nginx.conf` + `docker-compose.yml` 新增 `glass-blog-nginx` 容器，监听 80 端口转发到 Node.js 3000，两个容器同 bridge 网络通信
 - **docker-compose.yml**：挂载 `./data:/app/data`（数据库）和 `./uploads:/app/public/uploads`（上传），环境变量 `DB_PATH=/app/data/blog.db`
 - **数据库路径**：`src/db.js` 支持 `process.env.DB_PATH`，本地开发回退到项目根 `blog.db`
-- **CentOS 7 部署**：安装 Docker CE（阿里源）+ docker-compose v2，`git clone` + `docker-compose up -d --build`，开放 80 端口
+
+### 封面图片问题（2026-04-03）
+- **问题**：页面不显示封面图
+- **排查过程**：
+  1. 数据库 cover 字段正确写入
+  2. 容器内 uploads 目录有图片
+  3. API 返回的 JSON 包含正确 cover 值
+  4. nginx/容器内 curl 能正常访问图片
+- **解决**：**浏览器缓存问题**，Ctrl+Shift+R 强制刷新或换浏览器即可
+
+### CentOS 7 部署**：安装 Docker CE（阿里源）+ docker-compose v2，`git clone` + `docker-compose up -d --build`，开放 80 端口
 - **已测试**：本地 docker-compose up 验证通过，Nginx 80 端口正常代理到 Node.js，数据库持久化正常
 - **GitHub**：代码已推送，SSH 方式认证（密钥：`~/.ssh/id_ed25519`，公钥已加到 GitHub）
 

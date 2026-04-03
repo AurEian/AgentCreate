@@ -214,11 +214,13 @@ function renderPostsList(posts, containerId) {
       <div class="post-card" onclick="location.hash='#/post/${post.id}'">
         ${post.cover ? `
           <div class="post-card-cover">
-            <img src="${post.cover}" alt="${post.title}" loading="lazy" onerror="this.parentElement.innerHTML='<div class=\\'post-card-img-placeholder\\'><svg width=\\'40\\' height=\\'40\\' viewBox=\\'0 0 24 24\\' fill=\\'none\\' stroke=\\'rgba(167,139,250,.4)\\' stroke-width=\\'1.5\\'><path d=\\'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z\\'/><polyline points=\\'14 2 14 8 20 8\\'/></svg></div>'">
+            <img src="${post.cover}" alt="${post.title}" loading="lazy" onerror="this.parentElement.innerHTML='<div class=\\'post-card-img-placeholder\\'><div class=\\'placeholder-icon\\'><svg width=\\'48\\' height=\\'48\\' viewBox=\\'0 0 24 24\\' fill=\\'none\\' stroke=\\'rgba(167,139,250,.5)\\' stroke-width=\\'1.5\\'><rect x=\\'3\\' y=\\'3\\' width=\\'18\\' height=\\'18\\' rx=\\'2\\'/><circle cx=\\'8.5\\' cy=\\'8.5\\' r=\\'1.5\\'/><path d=\\'M21 15l-5-5L5 21\\'/></svg></div></div>'">
           </div>
         ` : `
           <div class="post-card-img-placeholder">
-            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="rgba(167,139,250,.4)" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            <div class="placeholder-icon">
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="rgba(167,139,250,.5)" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+            </div>
           </div>
         `}
         <div class="post-card-body">
@@ -314,11 +316,42 @@ async function renderPost(id) {
         </div>
       ` : ''}
       ${post.pending_title && currentUser && currentUser.role === 'admin' && authorId !== currentUser.id ? `
-        <div style="background:rgba(96,165,250,.1);border:1px solid rgba(96,165,250,.25);border-radius:12px;padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;gap:10px;font-size:13px;color:#60a5fa">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
-          <span>此文章有修改版本待审核。</span>
-          <button class="btn btn-ghost" style="margin-left:auto;padding:4px 12px;font-size:12px" onclick="reviewPostInDetail('${id}','approve',this)">通过</button>
-          <button class="btn btn-ghost" style="padding:4px 12px;font-size:12px;color:var(--err)" onclick="reviewPostInDetail('${id}','reject',this)">拒绝</button>
+        <div style="background:linear-gradient(135deg,rgba(96,165,250,.08),rgba(96,165,250,.04));border:1px solid rgba(96,165,250,.25);border-radius:16px;padding:20px;margin-bottom:20px">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            <span style="font-weight:600;color:#60a5fa;font-size:14px">修改对比</span>
+            <span style="font-size:12px;color:var(--t2);margin-left:auto">管理员审核</span>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+            <div>
+              <div style="font-size:10px;color:var(--t3);margin-bottom:6px;display:flex;align-items:center;gap:4px">
+                <span style="width:6px;height:6px;background:#ef4444;border-radius:50%"></span>修改前
+              </div>
+              <div style="background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:18px;min-height:200px;max-height:380px;overflow-y:auto">
+                <div style="font-size:16px;font-weight:600;color:var(--text);margin-bottom:12px;word-break:break-word">${escHtml(post.title)}</div>
+                ${post.summary ? `<div style="font-size:13px;color:var(--t2);margin-bottom:12px;line-height:1.6">${escHtml(post.summary)}</div>` : ''}
+              </div>
+            </div>
+            <div>
+              <div style="font-size:10px;color:var(--t3);margin-bottom:6px;display:flex;align-items:center;gap:4px">
+                <span style="width:6px;height:6px;background:#22c55e;border-radius:50%"></span>修改后
+              </div>
+              <div style="background:rgba(0,0,0,0.3);border:1px solid rgba(34,197,94,0.25);border-radius:10px;padding:18px;min-height:200px;max-height:380px;overflow-y:auto">
+                <div style="font-size:16px;font-weight:600;color:var(--text);margin-bottom:12px;word-break:break-word">${escHtml(post.pending_title)}</div>
+                ${post.pending_summary ? `<div style="font-size:13px;color:var(--t2);margin-bottom:12px;line-height:1.6">${escHtml(post.pending_summary)}</div>` : ''}
+              </div>
+            </div>
+          </div>
+          <div style="display:flex;gap:10px;margin-top:14px">
+            <button class="btn" style="background:#22c55e;color:#fff;flex:1" onclick="reviewPostInDetail('${id}','approve',this)">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+              通过
+            </button>
+            <button class="btn btn-ghost" style="border-color:rgba(239,68,68,.4);color:#ef4444;flex:1" onclick="reviewPostInDetail('${id}','reject',this)">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              拒绝
+            </button>
+          </div>
         </div>
       ` : ''}
       ${post.cover ? `
@@ -531,12 +564,14 @@ async function deletePostConfirm(postId) {
 }
 
 async function reviewPostInDetail(postId, action, btn) {
-  if (!await UI.showConfirm({ 
-    title: action === 'approve' ? '通过审核' : '拒绝文章', 
-    message: action === 'approve' ? '确定通过此文章的审核吗？审核通过后文章将发布至平台。' : '确定拒绝此文章吗？作者会收到拒绝通知。', 
-    confirmText: action === 'approve' ? '确认通过' : '确认拒绝',
-    type: action === 'approve' ? 'info' : 'warn'
-  })) return;
+  // 判断是修改审核还是新文章审核
+  const post = await API.getPost(postId);
+  const isModifyReview = !!(post?.pending_title);
+  const title = isModifyReview ? (action === 'approve' ? '通过修改' : '拒绝修改') : (action === 'approve' ? '通过审核' : '拒绝文章');
+  const message = isModifyReview
+    ? (action === 'approve' ? '确定通过此文章的修改吗？修改后的内容将替换原内容正式发布。' : '确定拒绝此修改吗？作者会收到拒绝通知，原内容不变。')
+    : (action === 'approve' ? '确定通过此文章的审核吗？审核通过后文章将发布至平台。' : '确定拒绝此文章吗？作者会收到拒绝通知。');
+  if (!await UI.showConfirm({ title, message, confirmText: action === 'approve' ? '确认通过' : '确认拒绝', type: action === 'approve' ? 'info' : 'warn' })) return;
   try {
     const res = await fetch(`${API_BASE}/admin/posts/${postId}/review`, {
       method: 'PUT', headers: jsonH(),
@@ -545,10 +580,12 @@ async function reviewPostInDetail(postId, action, btn) {
     const data = await res.json();
     if (data.success) {
       UI.showToast(data.message, 'ok');
-      // 200ms 后刷新页面，确保操作完成
-      setTimeout(() => {
-        location.hash = `#/post/${postId}`;
-      }, 200);
+      // 审核通过刷新，审核拒绝跳转首页
+      if (action === 'approve') {
+        location.reload();
+      } else {
+        setTimeout(() => location.hash = '#/', 800);
+      }
     } else {
       UI.showToast(data.message || '操作失败', 'err');
     }

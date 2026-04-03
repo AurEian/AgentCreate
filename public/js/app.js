@@ -82,7 +82,12 @@ async function createPost(title, summary, content, tags, cover) {
     body: JSON.stringify({ title, summary, content, tags, cover })
   });
   const data = await res.json();
-  return data.data || data;
+  if (!res.ok) {
+    const err = new Error(data.message || `HTTP ${res.status}`);
+    err._httpStatus = res.status;
+    throw err;
+  }
+  return data;
 }
 
 async function updatePost(id, title, summary, content, tags, cover, status) {
@@ -91,10 +96,12 @@ async function updatePost(id, title, summary, content, tags, cover, status) {
     body: JSON.stringify({ title, summary, content, tags, cover, status })
   });
   const data = await res.json();
-  const result = data.data || data;
-  // 保留 message 字段（用于前端判断是否需要审核提示）
-  if (data.message) result.message = data.message;
-  return result;
+  if (!res.ok) {
+    const err = new Error(data.message || `HTTP ${res.status}`);
+    err._httpStatus = res.status;
+    throw err;
+  }
+  return data;
 }
 
 async function deletePost(id) {
@@ -182,10 +189,10 @@ async function changePassword(oldPass, newPass) {
 }
 
 // ── Drafts ──
-async function saveDraft(title, summary, content, tags) {
+async function saveDraft(title, summary, content, tags, postId = null) {
   const res = await fetch(`${API_BASE}/drafts`, {
     method: 'POST', headers: jsonH(),
-    body: JSON.stringify({ title, summary, content, tags })
+    body: JSON.stringify({ post_id: postId, title, summary, content, tags })
   });
   return res.json();
 }
@@ -488,7 +495,12 @@ window.API = {
   markNotifRead: async (id) => { const r = await fetch(`${API_BASE}/notifications/read`, { method: 'PUT', headers: jsonH(), body: JSON.stringify({ id: id || null }) }); return r.json(); },
   getAnnouncements: async () => { const r = await fetch(`${API_BASE}/announcements`); const d = await r.json(); return d.data || []; },
   createAnnouncement: async (title, content) => { const r = await fetch(`${API_BASE}/announcements`, { method: 'POST', headers: jsonH(), body: JSON.stringify({ title, content }) }); return r.json(); },
-  deleteAnnouncement: async (id) => { const r = await fetch(`${API_BASE}/announcements/${id}`, { method: 'DELETE', headers: authH() }); return r.json(); }
+  deleteAnnouncement: async (id) => { const r = await fetch(`${API_BASE}/announcements/${id}`, { method: 'DELETE', headers: authH() }); return r.json(); },
+  getSensitiveWords: async () => { const r = await fetch(`${API_BASE}/admin/sensitive-words`, { headers: authH() }); const d = await r.json(); return d.data || []; },
+  addSensitiveWord: async (word) => { const r = await fetch(`${API_BASE}/admin/sensitive-words`, { method: 'POST', headers: jsonH(), body: JSON.stringify({ word }) }); return r.json(); },
+  deleteSensitiveWord: async (word) => { const r = await fetch(`${API_BASE}/admin/sensitive-words/${word}`, { method: 'DELETE', headers: authH() }); return r.json(); },
+  getPendingProfiles: async () => { const r = await fetch(`${API_BASE}/admin/pending-profiles`, { headers: authH() }); const d = await r.json(); return d.data || []; },
+  reviewProfile: async (userId, action) => { const r = await fetch(`${API_BASE}/admin/users/${userId}/profile-review`, { method: 'POST', headers: jsonH(), body: JSON.stringify({ action }) }); return r.json(); }
 };
 // ============ UI: Confirm Dialog ============
 function showConfirm({ title, message, confirmText = '确定', cancelText = '取消', type = 'warn' }) {

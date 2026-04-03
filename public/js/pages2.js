@@ -2,6 +2,7 @@
 let autoSaveTimer = null;
 let currentTags = [];
 let coverDataUrl = '';
+let currentEditPostId = null; // 当前编辑的文章ID（编辑模式时设置）
 
 // Session draft: save/restore new post content across page navigations
 function saveSessionDraft() {
@@ -23,6 +24,7 @@ async function renderWrite() {
   
   // Check if editing existing post
   const editId = location.hash.includes('?edit=') ? location.hash.split('?edit=')[1] : null;
+  currentEditPostId = editId; // 保存当前编辑的文章ID
   let editPost = null;
   if (editId) {
     editPost = await API.getPost(editId);
@@ -274,7 +276,7 @@ function triggerAutoSave() {
     const content = document.getElementById('md-editor')?.value || '';
     const summary = document.getElementById('post-summary')?.value || '';
     if (title.length > 0 || content.length > 10) {
-      await API.saveDraft(title, summary, content, currentTags);
+      await API.saveDraft(title, summary, content, currentTags, currentEditPostId);
       const s = document.getElementById('autosave-status');
       if (s) {
         s.className = 'autosave saved';
@@ -313,6 +315,11 @@ async function publishPost(editId) {
     clearTimeout(autoSaveTimer);
     clearSessionDraft();
     
+    // 发布成功后删除对应草稿
+    if (editId) {
+      try { await API.deleteDraft('post:' + editId); } catch {}
+    }
+    
     const newPost = res.data;
     const postId = newPost.id || editId;
     const status = newPost.status;
@@ -320,7 +327,7 @@ async function publishPost(editId) {
     if (editId) {
       // 编辑模式
       if (res.message && res.message.includes('审核')) {
-        UI.showToast(res.message, 'info');
+        UI.showToast(res.message, 'ok');
       } else {
         UI.showToast('修改已保存', 'ok');
       }
@@ -329,12 +336,12 @@ async function publishPost(editId) {
       if (status === 'pending') {
         UI.showToast('文章已提交，等待审核', 'info');
       } else {
-        UI.showToast('文章发布成功！', 'ok');
+        UI.showToast('文章发布成功', 'ok');
       }
     }
     setTimeout(() => location.hash = `#/post/${postId}`, 600);
   } catch (err) {
-    UI.showToast('发布失败', 'err');
+    UI.showToast(err.message || '发布失败', 'err');
   }
 }
 
@@ -508,7 +515,7 @@ async function renderNotifications(pageNum = 1) {
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:22px;height:22px"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
           通知中心
         </h2>
-        <button class="btn btn-sm" onclick="markAllRead()" style="background:var(--glass);border:1px solid var(--glass-b)">全部已读</button>
+        <button class="btn btn-sm" onclick="markAllRead()" style="background:var(--primary);color:white;border:1px solid rgba(255,255,255,.2);box-shadow:0 2px 8px rgba(99,102,241,.3);padding:8px 16px;border-radius:8px">全部已读</button>
       </div>
       <div id="notif-list" class="notif-list">
         <div class="skeleton skel-line"></div>
@@ -529,12 +536,14 @@ async function renderNotifications(pageNum = 1) {
       const typeMap = {
         comment: ['评论了你的文章', '💬'], like: ['赞了你的文章', '❤️'], favorite: ['收藏了你的文章', '⭐'],
         follow: ['关注了你', '👤'], reply: ['回复了你的评论', '💬'],
-        review: ['提交了新文章待审核', '📝'], approve: ['你的文章已通过审核', '✅'], reject: ['你的文章被拒绝了', '❌']
+        review: ['提交了新文章待审核', '📝'], approve: ['你的文章已通过审核', '✅'], reject: ['你的文章被拒绝了', '❌'],
+        profile_review: ['提交了资料修改待审核', '👤'], profile_approve: ['你的资料修改已通过', '✅'], profile_reject: ['你的资料修改被拒绝了', '❌'],
+        admin_edit: ['管理员修改了你的文章', '🔧']
       };
       const [action, icon] = typeMap[n.type] || ['互动了', '🔔'];
-      // review 类型：管理员收到，链接指向文章详情；approve/reject：作者收到
+      // review/admin_edit 类型：管理员收到，链接指向文章详情；approve/reject：作者收到
       let link;
-      if (n.type === 'review' || n.type === 'approve' || n.type === 'reject') {
+      if (n.type === 'review' || n.type === 'approve' || n.type === 'reject' || n.type === 'admin_edit') {
         link = n.post_id ? `#/post/${n.post_id}` : '#/';
       } else {
         link = n.post_id ? `#/post/${n.post_id}` : `#/profile/${n.from_user_id}`;

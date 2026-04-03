@@ -58,10 +58,11 @@ async function initDB() {
         PRIMARY KEY(follower_id, following_id)
       )`,
       `CREATE TABLE IF NOT EXISTS drafts (
-        id TEXT PRIMARY KEY, user_id TEXT NOT NULL,
+        id TEXT PRIMARY KEY, user_id TEXT NOT NULL, post_id TEXT,
         title TEXT DEFAULT '', summary TEXT DEFAULT '', content TEXT DEFAULT '',
         tags TEXT DEFAULT '[]',
-        updated_at TEXT DEFAULT (datetime('now','localtime'))
+        updated_at TEXT DEFAULT (datetime('now','localtime')),
+        UNIQUE(user_id, post_id)
       )`,
       `CREATE TABLE IF NOT EXISTS audit_log (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -80,8 +81,15 @@ async function initDB() {
         title TEXT NOT NULL, content TEXT NOT NULL,
         created_at TEXT DEFAULT (datetime('now','localtime'))
       )`,
+      `CREATE TABLE IF NOT EXISTS sensitive_words (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, word TEXT UNIQUE NOT NULL,
+        created_at TEXT DEFAULT (datetime('now','localtime'))
+      )`,
     ];
     tables.forEach(sql => { try { db.run(sql); } catch {} });
+    // 初始化敏感词
+    const initWords = ['台独','藏独','疆独','分裂国家','颠覆政权','恐怖主义','赌博','博彩','诈骗','传销','色情','毒品','武器'];
+    initWords.forEach(w => { try { db.run(`INSERT OR IGNORE INTO sensitive_words (word) VALUES (?)`, [w]); } catch {} });
     saveDB();
     return;
   }
@@ -92,6 +100,8 @@ async function initDB() {
     id TEXT PRIMARY KEY, email TEXT UNIQUE NOT NULL, password TEXT NOT NULL,
     name TEXT NOT NULL, role TEXT NOT NULL DEFAULT 'user',
     avatar TEXT DEFAULT '', bio TEXT DEFAULT '',
+    pending_name TEXT DEFAULT '', pending_bio TEXT DEFAULT '',
+    profile_pending INTEGER DEFAULT 0,
     created_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
   )`);
   db.run(`CREATE TABLE bans (
@@ -99,6 +109,15 @@ async function initDB() {
     reason TEXT NOT NULL, banned_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
     banned_until TEXT NOT NULL, UNIQUE(user_id)
   )`);
+  db.run(`CREATE TABLE sensitive_words (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, word TEXT UNIQUE NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+  )`);
+  // 初始化默认敏感词
+  const initWords = ['台独','藏独','疆独','分裂国家','颠覆政权','恐怖主义','赌博','博彩','诈骗','传销','色情','毒品','武器'];
+  initWords.forEach(w => {
+    try { db.run(`INSERT OR IGNORE INTO sensitive_words (word) VALUES (?)`, [w]); } catch {}
+  });
   db.run(`CREATE TABLE tags (
     id TEXT PRIMARY KEY, name TEXT UNIQUE NOT NULL
   )`);
@@ -135,10 +154,11 @@ async function initDB() {
     PRIMARY KEY(follower_id, following_id)
   )`);
   db.run(`CREATE TABLE drafts (
-    id TEXT PRIMARY KEY, user_id TEXT NOT NULL,
+    id TEXT PRIMARY KEY, user_id TEXT NOT NULL, post_id TEXT,
     title TEXT DEFAULT '', summary TEXT DEFAULT '', content TEXT DEFAULT '',
     tags TEXT DEFAULT '[]',
-    updated_at TEXT DEFAULT (datetime('now','localtime'))
+    updated_at TEXT DEFAULT (datetime('now','localtime')),
+    UNIQUE(user_id, post_id)
   )`);
   db.run(`CREATE TABLE audit_log (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

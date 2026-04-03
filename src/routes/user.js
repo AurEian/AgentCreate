@@ -52,9 +52,42 @@ function setupUserRoutes(app) {
     ok(res, { data: withTags });
   });
 
-  // 修改个人资料
+  // 敏感词检查函数
+function checkSensitive(text) {
+  if (!text) return null;
+  const words = qa('SELECT word FROM sensitive_words');
+  for (const w of words) {
+    if (text.toLowerCase().includes(w.word.toLowerCase())) return w.word;
+  }
+  return null;
+}
+
+// 修改个人资料
   app.put('/api/user/profile', requireAuth, (req, res) => {
     const { name, bio, avatar } = req.body;
+    
+    // 检查敏感词
+    const sensitiveName = name ? checkSensitive(name) : null;
+    const sensitiveBio = bio ? checkSensitive(bio) : null;
+    
+    if (sensitiveName || sensitiveBio) {
+      // 有敏感词：暂不直接修改，记录待审核
+      const pendingName = name?.trim() || '';
+      const pendingBio = bio !== undefined ? bio : '';
+      if (name) run('UPDATE users SET pending_name=? WHERE id=?', [pendingName, req.user.id]);
+      if (bio !== undefined) run('UPDATE users SET pending_bio=? WHERE id=?', [pendingBio, req.user.id]);
+      run('UPDATE users SET profile_pending=1 WHERE id=?', [req.user.id]);
+      saveDB();
+      
+      // 通知管理员
+      const admins = qa('SELECT id FROM users WHERE role="admin"');
+      const { notify } = require('../db');
+      admins.forEach(a => notify(a.id, req.user.id, 'profile_review', ''));
+      
+      return ok(res, { message: '资料包含敏感词，已提交审核', pending: true });
+    }
+    
+    // 无敏感词：直接修改
     if (name) run('UPDATE users SET name=? WHERE id=?', [name.trim(), req.user.id]);
     if (bio !== undefined) run('UPDATE users SET bio=? WHERE id=?', [bio, req.user.id]);
     if (avatar !== undefined) run('UPDATE users SET avatar=? WHERE id=?', [avatar, req.user.id]);
