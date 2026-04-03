@@ -180,11 +180,11 @@ async function initDB() {
 
   // Seed users
   const seed = [
-    ['u1','admin@example.com','123456','管理员','admin','','全站管理员','2026-01-01 00:00:00'],
-    ['u2','test@example.com','test123','测试用户','user','','热爱前端开发的程序员','2026-02-15 10:00:00'],
-    ['u3','demo@example.com','demo','演示账户','user','','Node.js 后端开发者','2026-03-01 08:00:00'],
+    ['u1','admin@example.com','123456','管理员','admin','','','','',0,'2026-01-01 00:00:00'],
+    ['u2','test@example.com','test123','测试用户','user','','','','',0,'2026-02-15 10:00:00'],
+    ['u3','demo@example.com','demo','演示账户','user','','','','',0,'2026-03-01 08:00:00'],
   ];
-  const ins = db.prepare('INSERT INTO users VALUES (?,?,?,?,?,?,?,?)');
+  const ins = db.prepare('INSERT INTO users VALUES (?,?,?,?,?,?,?,?,?,?,?)');
   seed.forEach(r => ins.run(r));
   ins.free();
 
