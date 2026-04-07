@@ -1,7 +1,7 @@
 /**
  * src/routes/user.js - 用户资料/密码/关注
  */
-const { q1, qa, run, saveDB, ok, fail, notify } = require('../db');
+const { q1, qa, run, saveDB, ok, fail, notify, now } = require('../db');
 const { requireAuth, optionalAuth } = require('../middleware/auth');
 
 function setupUserRoutes(app) {
