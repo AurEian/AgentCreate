@@ -152,14 +152,18 @@ async function unfavoritePost(postId) {
 // ── Follows ── (backend: POST /api/follow/:id toggles)
 async function follow(userId) {
   const res = await fetch(`${API_BASE}/follow/${userId}`, { method: 'POST', headers: authH() });
+  const data = await res.json();
   delete userCache[userId]; // 清除缓存，下次获取用户信息会重新请求
-  return res.json();
+  if (!res.ok || !data.success) throw new Error(data.message || '操作失败');
+  return data;
 }
 async function unfollow(userId) {
   // Same endpoint toggles
   const res = await fetch(`${API_BASE}/follow/${userId}`, { method: 'POST', headers: authH() });
+  const data = await res.json();
   delete userCache[userId];
-  return res.json();
+  if (!res.ok || !data.success) throw new Error(data.message || '操作失败');
+  return data;
 }
 
 // ── User profile ──
