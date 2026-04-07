@@ -107,20 +107,35 @@ function setupPostRoutes(app) {
     if (post.user_id !== req.user.id && req.user.role !== 'admin') return fail(res, '无权编辑此文章', 403);
     const { title, summary, content, tags, cover } = req.body;
 
-    // 非管理员修改已发布/已拒绝文章 → pending 机制
+    // 非管理员修改已发布/已拒绝文章 → pending 机制（检查敏感词）
     if (req.user.role !== 'admin' && (post.status === 'published' || post.status === 'rejected')) {
       const newTitle = title !== undefined ? title.trim() : post.title;
       const newSummary = summary !== undefined ? (summary || '').trim() : post.summary;
       const newContent = content || post.content;
       const newCover = cover || null;
       const newTags = tags ? JSON.stringify(tags) : '';
-      run('UPDATE posts SET pending_title=?, pending_summary=?, pending_content=?, pending_cover=?, pending_tags=?, status=?, updated_at=? WHERE id=?',
-        [newTitle, newSummary, newContent, newCover, newTags, 'pending', now(), req.params.id]);
-      const admins = qa('SELECT id FROM users WHERE role="admin"');
-      admins.forEach(a => notify(a.id, req.user.id, 'review', req.params.id));
-      logAudit(req.user.id, 'edit_post', req.params.id, newTitle);
-      saveDB();
-      return ok(res, { message: '修改已提交，等待管理员审核。审核前旧版本继续展示。', data: { id: req.params.id, status: 'pending' } });
+      
+      // 检查新内容是否含敏感词
+      const fullText = `${newTitle} ${newSummary} ${newContent}`;
+      const matchedWord = checkSensitiveWords(fullText);
+      
+      if (!matchedWord) {
+        // 无敏感词，直接发布新版本
+        run('UPDATE posts SET title=?, summary=?, content=?, cover=?, tags=?, status=?, updated_at=? WHERE id=?',
+          [newTitle, newSummary, newContent, newCover, newTags, 'published', now(), req.params.id]);
+        logAudit(req.user.id, 'edit_post', req.params.id, newTitle);
+        saveDB();
+        return ok(res, { message: '修改已发布', data: { id: req.params.id, status: 'published' }, matchedWord: null });
+      } else {
+        // 有敏感词，存入 pending 等待审核
+        run('UPDATE posts SET pending_title=?, pending_summary=?, pending_content=?, pending_cover=?, pending_tags=?, status=?, updated_at=? WHERE id=?',
+          [newTitle, newSummary, newContent, newCover, newTags, 'pending', now(), req.params.id]);
+        const admins = qa('SELECT id FROM users WHERE role="admin"');
+        admins.forEach(a => notify(a.id, req.user.id, 'review', req.params.id));
+        logAudit(req.user.id, 'edit_post', req.params.id, newTitle);
+        saveDB();
+        return ok(res, { message: '修改含敏感内容，已提交审核', data: { id: req.params.id, status: 'pending' }, matchedWord });
+      }
     }
 
     // 管理员或修改草稿/pending文章 → 直接覆盖

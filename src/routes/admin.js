@@ -159,6 +159,53 @@ function setupAdminRoutes(app) {
     }
   });
 
+  // 获取文章违规内容信息（敏感词匹配+上下文）
+  app.get('/api/admin/posts/:id/violation', requireAuth, requireAdmin, (req, res) => {
+    const post = q1('SELECT * FROM posts WHERE id = ?', [req.params.id]);
+    if (!post) return fail(res, '文章不存在', 404);
+    
+    // 检查是否有待审核的修改内容
+    const content = post.pending_title ? post.pending_content : post.content;
+    const title = post.pending_title || post.title;
+    const summary = post.pending_summary || post.summary || '';
+    
+    if (!content) return ok(res, { data: null });
+    
+    // 获取敏感词列表
+    const words = qa('SELECT word FROM sensitive_words').map(r => r.word);
+    const violations = [];
+    const fullText = `${title} ${summary} ${content}`.toLowerCase();
+    
+    for (const word of words) {
+      const lowerWord = word.toLowerCase();
+      const idx = fullText.indexOf(lowerWord);
+      if (idx !== -1) {
+        // 获取上下文（前后各50个字符）
+        const start = Math.max(0, idx - 50);
+        const end = Math.min(fullText.length, idx + word.length + 50);
+        let context = fullText.slice(start, end);
+        if (start > 0) context = '...' + context;
+        if (end < fullText.length) context = context + '...';
+        
+        // 确定违规位置（标题/摘要/正文）
+        let location = '正文';
+        const titleLower = title.toLowerCase();
+        const summaryLower = summary.toLowerCase();
+        const titleIdx = titleLower.indexOf(lowerWord);
+        const summaryIdx = summaryLower.indexOf(lowerWord);
+        if (titleIdx !== -1) location = '标题';
+        else if (summaryIdx !== -1) location = '摘要';
+        
+        violations.push({ word, context, location });
+      }
+    }
+    
+    // 检查是否有封面图片（图片直接推给管理员审核）
+    const hasCover = !!post.pending_cover || !!post.cover;
+    
+    ok(res, { data: { violations, hasCover, hasPendingEdit: !!post.pending_title } });
+  });
+
   // 管理员删除文章
   app.delete('/api/admin/posts/:id', requireAuth, requireAdmin, (req, res) => {
     const post = q1('SELECT title FROM posts WHERE id=?', [req.params.id]);

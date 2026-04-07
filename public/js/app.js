@@ -503,11 +503,12 @@ window.API = {
   getSensitiveWords: async () => { const r = await fetch(`${API_BASE}/admin/sensitive-words`, { headers: authH() }); const d = await r.json(); return d.data || []; },
   addSensitiveWord: async (word) => { const r = await fetch(`${API_BASE}/admin/sensitive-words`, { method: 'POST', headers: jsonH(), body: JSON.stringify({ word }) }); return r.json(); },
   deleteSensitiveWord: async (word) => { const r = await fetch(`${API_BASE}/admin/sensitive-words/${word}`, { method: 'DELETE', headers: authH() }); return r.json(); },
+  getPostViolation: async (id) => { const r = await fetch(`${API_BASE}/admin/posts/${id}/violation`, { headers: authH() }); const d = await r.json(); return d.data || null; },
   getPendingProfiles: async () => { const r = await fetch(`${API_BASE}/admin/pending-profiles`, { headers: authH() }); const d = await r.json(); return d.data || []; },
   reviewProfile: async (userId, action) => { const r = await fetch(`${API_BASE}/admin/users/${userId}/profile-review`, { method: 'POST', headers: jsonH(), body: JSON.stringify({ action }) }); return r.json(); }
 };
 // ============ UI: Confirm Dialog ============
-function showConfirm({ title, message, confirmText = '确定', cancelText = '取消', type = 'warn' }) {
+function showConfirm({ title, message, confirmText = '确定', cancelText = '取消', type = 'warn', dangerouslyUseHTML = false }) {
   return new Promise((resolve) => {
     const icons = {
       warn: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>',
@@ -520,7 +521,7 @@ function showConfirm({ title, message, confirmText = '确定', cancelText = '取
       <div class="confirm-dialog">
         <div class="confirm-icon confirm-icon-${type}">${icons[type] || icons.warn}</div>
         <div class="confirm-title">${title || '确认操作'}</div>
-        <div class="confirm-msg">${message || ''}</div>
+        <div class="confirm-msg ${dangerouslyUseHTML ? 'confirm-msg-html' : ''}">${message || ''}</div>
         <div class="confirm-actions">
           <button class="btn btn-ghost confirm-cancel">${cancelText}</button>
           <button class="btn confirm-ok confirm-ok-${type}">${confirmText}</button>
