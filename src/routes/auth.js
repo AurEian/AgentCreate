@@ -13,7 +13,7 @@ function setupAuthRoutes(app) {
     const existing = q1('SELECT id FROM users WHERE email = ?', [email]);
     if (existing) return fail(res, '该邮箱已被注册');
     const id = randomUUID();
-    run('INSERT INTO users VALUES (?,?,?,?,?,?,?,?)', [id, email, password, name.trim(), 'user', '', '', now()]);
+    run('INSERT INTO users VALUES (?,?,?,?,?,?,?,?,?,?,?)', [id, email, password, name.trim(), 'user', '', '', '', '', 0, now()]);
     saveDB();
     ok(res, { message: '注册成功', user: { id, name: name.trim(), email, role: 'user' } });
   });
