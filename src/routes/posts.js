@@ -115,12 +115,12 @@ function setupPostRoutes(app) {
       const newCover = cover || null;
       const newTags = tags ? JSON.stringify(tags) : '';
       run('UPDATE posts SET pending_title=?, pending_summary=?, pending_content=?, pending_cover=?, pending_tags=?, status=?, updated_at=? WHERE id=?',
-        [newTitle, newSummary, newContent, newCover, newTags, 'published', now(), req.params.id]);
+        [newTitle, newSummary, newContent, newCover, newTags, 'pending', now(), req.params.id]);
       const admins = qa('SELECT id FROM users WHERE role="admin"');
       admins.forEach(a => notify(a.id, req.user.id, 'review', req.params.id));
       logAudit(req.user.id, 'edit_post', req.params.id, newTitle);
       saveDB();
-      return ok(res, { message: '修改已提交，等待管理员审核。审核前旧版本继续展示。', data: { id: req.params.id, status: 'published' } });
+      return ok(res, { message: '修改已提交，等待管理员审核。审核前旧版本继续展示。', data: { id: req.params.id, status: 'pending' } });
     }
 
     // 管理员或修改草稿/pending文章 → 直接覆盖
