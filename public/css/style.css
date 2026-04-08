@@ -402,9 +402,9 @@ table.tbl tr:hover td{background:rgba(255,255,255,.02);color:var(--t1)}
 .notif-item.unread{background:rgba(167,139,250,.06);border-color:rgba(167,139,250,.15)}
 .notif-icon{width:36px;height:36px;border-radius:10px;background:rgba(255,255,255,.05);display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0}
 .notif-body{flex:1;min-width:0}
-.notif-main{font-size:13px;color:#c9cad0;line-height:1.5}
-.notif-main strong{color:#e5e5ea}
-.notif-time{font-size:11px;color:#8a8a95;margin-top:2px}
+.notif-main{font-size:13px;color:var(--t2);line-height:1.5}
+.notif-main strong{color:var(--t1)}
+.notif-time{font-size:11px;color:var(--t3);margin-top:2px}
 .notif-dot{width:8px;height:8px;border-radius:50%;background:var(--accent);flex-shrink:0}
 
 /* ── Announcement banner ── */

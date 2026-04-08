@@ -558,22 +558,20 @@ async function loadAdminPosts() {
               const hasPending = p.has_pending_edit == 1;
               return `
               <tr>
-                <td><a href="#/post/${p.id}" style="color:var(--accent)">${escHtml(p.title)}</a>${hasPending ? ' <span style="font-size:11px;background:rgba(251,191,36,.15);color:#fbbf24;padding:1px 6px;border-radius:6px;margin-left:4px">修改待审</span>' : ''}</td>
+                <td><a href="#/post/${p.id}" style="color:var(--accent)">${escHtml(p.title)}</a>${p.status === 'published' && hasPending ? ' <span style="font-size:11px;background:rgba(251,191,36,.15);color:#fbbf24;padding:1px 6px;border-radius:6px;margin-left:4px">修改待审</span>' : ''}</td>
                 <td>${escHtml(authorName)}</td>
                 <td><span class="${statusClass}">${statusText}</span></td>
                 <td>${p.views || 0}</td>
                 <td>${UI.formatDate(p.created_at)}</td>
                 <td>
                   <div class="tbl-actions">
-                    ${p.status === 'pending' ? `
+                    ${p.status === 'pending' || (p.status === 'published' && hasPending) ? `
                       <button class="btn btn-xs" style="background:var(--ok);color:#fff" onclick="reviewPost('${p.id}','approve')">通过</button>
                       <button class="btn btn-danger btn-xs" onclick="reviewPost('${p.id}','reject')">拒绝</button>
                     ` : ''}
-                    ${hasPending ? `
-                      <button class="btn btn-xs" style="background:var(--ok);color:#fff" onclick="reviewPost('${p.id}','approve')">通过修改</button>
-                      <button class="btn btn-danger btn-xs" onclick="reviewPost('${p.id}','reject')">拒绝修改</button>
+                    ${p.status !== 'pending' && !hasPending ? `
+                      <button class="btn btn-ghost btn-xs" onclick="location.hash='#/write?edit=${p.id}'">编辑</button>
                     ` : ''}
-                    <button class="btn btn-ghost btn-xs" onclick="location.hash='#/write?edit=${p.id}'">编辑</button>
                     <button class="btn btn-danger btn-xs" onclick="adminDeletePost('${p.id}')">删除</button>
                   </div>
                 </td>
@@ -600,65 +598,92 @@ async function adminDeletePost(id) {
 }
 
 async function reviewPost(id, action) {
-  // 先获取违规信息
+  // 拒绝时直接弹出输入原因框
+  if (action === 'reject') {
+    const reason = await UI.showPrompt({
+      title: '拒绝原因',
+      message: '请输入拒绝原因，作者将收到通知',
+      placeholder: '请说明拒绝理由...',
+      confirmText: '确认拒绝',
+      type: 'warn'
+    });
+    if (!reason || !reason.trim()) return;
+    
+    try {
+      const res = await fetch(`${API_BASE}/admin/posts/${id}/review`, {
+        method: 'PUT', headers: jsonH(),
+        body: JSON.stringify({ action: 'reject', reason: reason.trim() })
+      });
+      const data = await res.json();
+      if (data.success) {
+        UI.showToast(data.message, 'ok');
+        loadAdminPosts();
+      } else {
+        UI.showToast(data.message || '操作失败', 'err');
+      }
+    } catch {
+      UI.showToast('操作失败', 'err');
+    }
+    return;
+  }
+  
+  // 通过：先获取违规信息
   const violation = await API.getPostViolation(id);
   const hasViolation = violation && (violation.violations?.length > 0 || violation.hasCover);
   
-  // 如果有违规内容或图片，先显示违规详情
   if (hasViolation) {
     let html = '<div style="max-height:400px;overflow-y:auto;padding:8px">';
     
-    // 显示封面图片提示
     if (violation.hasCover) {
+      const coverLabel = violation.isNewCover ? '📷 新增封面图片' : '📷 包含封面图片';
+      const coverDesc = violation.isNewCover ? '修改内容包含新的封面图片，需要人工审核' : '文章包含封面图片，需要人工审核';
       html += `<div style="margin-bottom:16px;padding:12px;background:rgba(251,191,36,.1);border-radius:8px;border:1px solid rgba(251,191,36,.3)">
-        <div style="font-weight:600;color:#fbbf24;margin-bottom:6px">📷 包含图片</div>
-        <div style="font-size:13px;color:var(--text-muted)">文章包含封面图片，需要人工审核</div>
+        <div style="font-weight:600;color:#fbbf24;margin-bottom:6px">${coverLabel}</div>
+        <div style="font-size:13px;color:var(--text-muted)">${coverDesc}</div>
       </div>`;
     }
     
-    // 显示敏感词违规详情
     if (violation.violations?.length > 0) {
       html += `<div style="margin-bottom:12px">
-        <div style="font-weight:600;margin-bottom:8px;color:var(--text-main)">⚠️ 敏感词检测结果</div>`;
-      
-      for (const v of violation.violations) {
-        // 高亮敏感词
-        const contextHighlight = v.context.replace(new RegExp(v.word, 'gi'), match => `<mark style="background:rgba(239,68,68,.2);color:#ef4444;padding:1px 4px;border-radius:3px">${match}</mark>`);
-        
-        html += `<div style="margin-bottom:10px;padding:10px;background:var(--bg-card);border-radius:6px;border:1px solid var(--border)">
-          <div style="font-size:12px;color:var(--text-muted);margin-bottom:4px">位置：${v.location}</div>
-          <div style="font-size:13px;word-break:break-all;line-height:1.6;color:var(--text-main)">${contextHighlight}</div>
+        <div style="font-weight:600;margin-bottom:12px;color:var(--text-main);display:flex;align-items:center;gap:8px">
+          <span style="color:#ef4444">⚠️</span>
+          <span>发现 ${violation.violations.length} 处违规内容</span>
         </div>`;
-      }
+      
+      violation.violations.forEach((v, i) => {
+        html += `<div style="margin-bottom:12px;padding:10px;background:rgba(239,68,68,.08);border-radius:8px;border-left:3px solid #ef4444">
+          <div style="font-size:11px;color:#ef4444;margin-bottom:4px;font-weight:600">${v.type === 'title' ? '标题' : v.type === 'summary' ? '摘要' : '正文'} - 第 ${i + 1} 处</div>
+          <div style="font-size:13px;color:var(--text-main);line-height:1.5">
+            <span style="background:rgba(239,68,68,.2);padding:1px 4px;border-radius:4px">敏感词: ${v.word}</span>
+            ${v.context ? `<br><span style="color:var(--text-muted)">上下文: ...${v.context}...</span>` : ''}
+          </div>
+        </div>`;
+      });
       html += '</div>';
     }
-    
     html += '</div>';
     
-    // 显示违规详情弹窗，然后让管理员确认操作
-    if (!await UI.showConfirm({ 
-      title: action === 'approve' ? '通过审核（含违规内容）' : '拒绝文章（含违规内容）', 
-      message: html, 
-      confirmText: action === 'approve' ? '确认通过' : '确认拒绝', 
-      type: action === 'approve' ? 'warn' : 'danger',
+    if (!await UI.showConfirm({
+      title: '⚠️ 通过审核（含违规内容）',
+      message: html,
+      confirmText: '仍要通过',
+      type: 'danger',
       dangerouslyUseHTML: true
     })) return;
   } else {
-    // 无违规，弹普通确认框
     const post = await API.getPost(id);
     const isModifyReview = !!(post?.pending_title);
-    const confirmTitle = isModifyReview ? (action === 'approve' ? '通过修改' : '拒绝修改') : (action === 'approve' ? '通过审核' : '拒绝文章');
-    const confirmMsg = isModifyReview
-      ? (action === 'approve' ? '确定通过此文章的修改吗？修改后的内容将替换原内容正式发布。' : '确定拒绝此修改吗？作者会收到拒绝通知，原内容不变。')
-      : (action === 'approve' ? '确定通过此文章的审核吗？审核通过后文章将发布至平台。' : '确定拒绝此文章吗？作者会收到拒绝通知。');
-    if (!await UI.showConfirm({ title: confirmTitle, message: confirmMsg, confirmText: action === 'approve' ? '确认通过' : '确认拒绝', type: action === 'approve' ? 'info' : 'warn' })) return;
+    const title = isModifyReview ? '通过修改' : '通过审核';
+    const message = isModifyReview
+      ? '确定通过此文章的修改吗？修改后的内容将替换原内容正式发布。'
+      : '确定通过此文章的审核吗？审核通过后文章将发布至平台。';
+    if (!await UI.showConfirm({ title, message, confirmText: '确定', type: 'info' })) return;
   }
   
-  // 执行审核操作
   try {
     const res = await fetch(`${API_BASE}/admin/posts/${id}/review`, {
       method: 'PUT', headers: jsonH(),
-      body: JSON.stringify({ action })
+      body: JSON.stringify({ action: 'approve' })
     });
     const data = await res.json();
     if (data.success) {

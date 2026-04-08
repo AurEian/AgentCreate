@@ -274,6 +274,13 @@ function renderPagination(total, current, callback, containerId) {
 
 // ========== POST DETAIL PAGE ==========
 async function renderPost(id) {
+  // 确保 id 是字符串且有效
+  const postId = String(id || '').trim();
+  if (!postId || postId === 'undefined') {
+    document.getElementById('post-content').innerHTML = '<div style="padding:40px;text-align:center;color:var(--t3)">文章 ID 无效</div>';
+    return;
+  }
+  
   const page = document.getElementById('home');
   page.innerHTML = `
     <div class="post-detail">
@@ -284,7 +291,14 @@ async function renderPost(id) {
   page.classList.add('active');
   
   try {
-    const post = await API.getPost(id);
+    const post = await API.getPost(postId);
+    
+    // 检查是否获取成功
+    if (!post || post.success === false || !post.id) {
+      console.error('[DEBUG] 获取文章失败:', postId, post);
+      document.getElementById('post-content').innerHTML = `<div style="padding:40px;text-align:center;color:var(--t3)">文章不存在或已被删除<br><small>ID: ${escHtml(postId)}</small></div>`;
+      return;
+    }
     
     // Normalize
     const authorId = post.user_id || post.authorId || post.author_id || '';
@@ -316,42 +330,48 @@ async function renderPost(id) {
         </div>
       ` : ''}
       ${post.pending_title && currentUser && currentUser.role === 'admin' && authorId !== currentUser.id ? `
-        <div style="background:linear-gradient(135deg,rgba(96,165,250,.08),rgba(96,165,250,.04));border:1px solid rgba(96,165,250,.25);border-radius:16px;padding:20px;margin-bottom:20px">
-          <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-            <span style="font-weight:600;color:#60a5fa;font-size:14px">修改对比</span>
-            <span style="font-size:12px;color:var(--t2);margin-left:auto">管理员审核</span>
+        <div style="background:linear-gradient(135deg,rgba(96,165,250,.08),rgba(96,165,250,.04));border:1px solid rgba(96,165,250,.3);border-radius:16px;padding:16px 20px;margin-bottom:20px">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+            <span style="font-weight:600;color:#60a5fa;font-size:14px">用户提交了修改，待你审核</span>
           </div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-            <div>
-              <div style="font-size:10px;color:var(--t3);margin-bottom:6px;display:flex;align-items:center;gap:4px">
-                <span style="width:6px;height:6px;background:#ef4444;border-radius:50%"></span>修改前
-              </div>
-              <div style="background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:18px;min-height:200px;max-height:380px;overflow-y:auto">
-                <div style="font-size:16px;font-weight:600;color:var(--text);margin-bottom:12px;word-break:break-word">${escHtml(post.title)}</div>
-                ${post.summary ? `<div style="font-size:13px;color:var(--t2);margin-bottom:12px;line-height:1.6">${escHtml(post.summary)}</div>` : ''}
-              </div>
+          ${post.pending_title !== post.title ? `
+            <div style="margin-bottom:10px">
+              <div style="font-size:11px;color:var(--t3);margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px">修改后标题</div>
+              <div style="font-size:15px;font-weight:700;color:var(--t1)">${escHtml(post.pending_title)}</div>
             </div>
-            <div>
-              <div style="font-size:10px;color:var(--t3);margin-bottom:6px;display:flex;align-items:center;gap:4px">
-                <span style="width:6px;height:6px;background:#22c55e;border-radius:50%"></span>修改后
-              </div>
-              <div style="background:rgba(0,0,0,0.3);border:1px solid rgba(34,197,94,0.25);border-radius:10px;padding:18px;min-height:200px;max-height:380px;overflow-y:auto">
-                <div style="font-size:16px;font-weight:600;color:var(--text);margin-bottom:12px;word-break:break-word">${escHtml(post.pending_title)}</div>
-                ${post.pending_summary ? `<div style="font-size:13px;color:var(--t2);margin-bottom:12px;line-height:1.6">${escHtml(post.pending_summary)}</div>` : ''}
-              </div>
+          ` : ''}
+          ${post.pending_summary && post.pending_summary !== post.summary ? `
+            <div style="margin-bottom:10px">
+              <div style="font-size:11px;color:var(--t3);margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px">修改后摘要</div>
+              <div style="font-size:13px;color:var(--t2)">${escHtml(post.pending_summary)}</div>
             </div>
+          ` : ''}
+          ${post.pending_content ? `
+            <div style="margin-bottom:12px">
+              <div style="font-size:11px;color:var(--t3);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">修改后正文</div>
+              <div class="md-body" style="background:rgba(0,0,0,.15);border-radius:10px;padding:14px;max-height:400px;overflow-y:auto;font-size:13px">${typeof marked !== 'undefined' ? marked.parse(post.pending_content) : escHtml(post.pending_content)}</div>
+            </div>
+          ` : ''}
+          <div style="display:flex;gap:10px;margin-top:4px">
+            <button class="btn" style="background:#22c55e;color:#fff;flex:1" onclick="adminReviewPost('${post.id}','approve')">✓ 通过</button>
+            <button class="btn" style="background:rgba(239,68,68,.15);color:#ef4444;border:1px solid rgba(239,68,68,.3);flex:1" onclick="adminReviewPost('${post.id}','reject')">✗ 拒绝</button>
           </div>
-          <div style="display:flex;gap:10px;margin-top:14px">
-            <button class="btn" style="background:#22c55e;color:#fff;flex:1" onclick="reviewPostInDetail('${id}','approve',this)">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-              通过
-            </button>
-            <button class="btn btn-ghost" style="border-color:rgba(239,68,68,.4);color:#ef4444;flex:1" onclick="reviewPostInDetail('${id}','reject',this)">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-              拒绝
-            </button>
+        </div>
+      ` : ''}
+      ${post.status === 'banned' ? `
+        <div style="background:linear-gradient(135deg,rgba(239,68,68,.12),rgba(239,68,68,.05));border:1px solid rgba(239,68,68,.3);border-radius:16px;padding:20px;margin-bottom:20px">
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+            <span style="font-weight:700;color:#ef4444;font-size:16px">该博客已被管理员封禁</span>
           </div>
+          <div style="background:rgba(0,0,0,.2);border-radius:10px;padding:14px;margin-bottom:12px">
+            <div style="font-size:12px;color:var(--t3);margin-bottom:6px">封禁理由</div>
+            <div style="font-size:14px;color:var(--t1);line-height:1.6">${escHtml(post.ban_reason || '违反社区规范')}</div>
+          </div>
+          ${authorId === currentUser?.id ? `
+            <div style="font-size:13px;color:var(--t3)">请修改内容后重新提交审核，通过后即可恢复正常显示</div>
+          ` : ''}
         </div>
       ` : ''}
       ${post.cover ? `
@@ -364,6 +384,7 @@ async function renderPost(id) {
           ${(post.tags ? (Array.isArray(post.tags) ? post.tags : post.tags.split(' ')) : []).map(t => `<span class="post-card-tag">${t}</span>`).join('')}
           ${post.status === 'pending' ? '<span class="post-card-tag tag-pending" style="background:rgba(234,179,8,.15);color:#eab308;border-color:rgba(234,179,8,.3)">待审核</span>' : ''}
           ${post.status === 'rejected' ? '<span class="post-card-tag tag-rejected" style="background:rgba(239,68,68,.15);color:#ef4444;border-color:rgba(239,68,68,.3)">已拒绝</span>' : ''}
+          ${post.status === 'banned' ? '<span class="post-card-tag tag-banned" style="background:rgba(239,68,68,.15);color:#ef4444;border-color:rgba(239,68,68,.3)">已封禁</span>' : ''}
           ${post.pending_title && post.status === 'published' ? '<span class="post-card-tag tag-pending" style="background:rgba(251,191,36,.15);color:#fbbf24;border-color:rgba(251,191,36,.3)">修改待审核</span>' : ''}
         </div>
         <h1 style="font-size:28px;font-weight:800;line-height:1.3;margin-bottom:16px">${post.title}</h1>
@@ -382,7 +403,7 @@ async function renderPost(id) {
         </div>
       </div>
       
-      <div class="md-body">${marked.parse(post.content || '')}</div>
+      <div class="md-body">${typeof marked !== 'undefined' ? marked.parse(post.content || '') : escHtml(post.content || '')}</div>
       
       <div class="post-action-bar">
         <button class="action-btn ${likedByMe ? 'liked' : ''}" id="like-btn" onclick="toggleLike('${id}', this)">
@@ -396,7 +417,7 @@ async function renderPost(id) {
         ${currentUser && authorId === currentUser.id ? `
           <button class="action-btn" onclick="location.hash='#/write?edit=${id}'">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-            编辑
+            ${post.status === 'banned' ? '修改并重新提交' : '编辑'}
           </button>
           <button class="action-btn" style="color:var(--err);border-color:rgba(239,68,68,.3)" onclick="deletePostConfirm('${id}')">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
@@ -411,6 +432,18 @@ async function renderPost(id) {
           <button class="action-btn" style="color:var(--err);border-color:rgba(239,68,68,.3)" onclick="reviewPostInDetail('${id}','reject',this)">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
             拒绝
+          </button>
+        ` : ''}
+        ${currentUser && currentUser.role === 'admin' && post.status !== 'banned' && authorId !== currentUser.id ? `
+          <button class="action-btn" style="color:#ef4444;border-color:rgba(239,68,68,.3)" onclick="banPost('${id}')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+            封禁博客
+          </button>
+        ` : ''}
+        ${currentUser && currentUser.role === 'admin' && post.status === 'banned' ? `
+          <button class="action-btn" style="color:var(--ok);border-color:rgba(34,197,94,.3)" onclick="unbanPost('${id}')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+            解封博客
           </button>
         ` : ''}
       </div>
@@ -469,6 +502,7 @@ function renderCommentTree(comments, containerId, postId, parentId = null, depth
           <div class="comment-actions">
             <button class="comment-action" onclick="showReplyForm('${comment.id}', '${authorName}')">回复</button>
             ${comment.user_id === currentUser.id ? `<button class="comment-action" style="color:var(--err)" onclick="deleteComment('${comment.id}')">删除</button>` : ''}
+            ${currentUser && currentUser.role === 'admin' && comment.user_id !== currentUser.id ? `<button class="comment-action" style="color:#ef4444" onclick="adminDeleteComment('${comment.id}', '${authorName}')">删除</button>` : ''}
           </div>
           ${comments.some(c => c.parent_id === comment.id) ? `
             <div class="comment-replies">
@@ -552,6 +586,17 @@ async function deleteComment(commentId) {
   }
 }
 
+async function adminDeleteComment(commentId, authorName) {
+  if (!await UI.showConfirm({ title: '删除评论', message: `确定删除 ${authorName} 的评论吗？作为管理员，你可以删除任何用户的评论。`, confirmText: '确认删除', type: 'danger' })) return;
+  try {
+    await API.deleteComment(commentId);
+    UI.showToast('已删除', 'ok');
+    location.reload();
+  } catch {
+    UI.showToast('删除失败', 'err');
+  }
+}
+
 async function deletePostConfirm(postId) {
   if (!await UI.showConfirm({ title: '删除文章', message: '确定删除此文章吗？此操作无法撤销，所有评论、点赞等数据都将一并删除。', confirmText: '确认删除', type: 'danger' })) return;
   try {
@@ -563,34 +608,163 @@ async function deletePostConfirm(postId) {
   }
 }
 
+// 文章详情页内联审核（pending_title 修改审核）复用同一逻辑
+async function adminReviewPost(postId, action) {
+  return reviewPostInDetail(postId, action, null);
+}
+
 async function reviewPostInDetail(postId, action, btn) {
-  // 判断是修改审核还是新文章审核
-  const post = await API.getPost(postId);
-  const isModifyReview = !!(post?.pending_title);
-  const title = isModifyReview ? (action === 'approve' ? '通过修改' : '拒绝修改') : (action === 'approve' ? '通过审核' : '拒绝文章');
-  const message = isModifyReview
-    ? (action === 'approve' ? '确定通过此文章的修改吗？修改后的内容将替换原内容正式发布。' : '确定拒绝此修改吗？作者会收到拒绝通知，原内容不变。')
-    : (action === 'approve' ? '确定通过此文章的审核吗？审核通过后文章将发布至平台。' : '确定拒绝此文章吗？作者会收到拒绝通知。');
-  if (!await UI.showConfirm({ title, message, confirmText: action === 'approve' ? '确认通过' : '确认拒绝', type: action === 'approve' ? 'info' : 'warn' })) return;
+  // 拒绝时直接弹出输入原因框
+  if (action === 'reject') {
+    const reason = await UI.showPrompt({
+      title: '拒绝原因',
+      message: '请输入拒绝原因，作者将收到通知',
+      placeholder: '请说明拒绝理由...',
+      confirmText: '确认拒绝',
+      type: 'warn'
+    });
+    if (!reason || !reason.trim()) return;
+    
+    try {
+      const res = await fetch(`${API_BASE}/admin/posts/${postId}/review`, {
+        method: 'PUT', headers: jsonH(),
+        body: JSON.stringify({ action: 'reject', reason: reason.trim() })
+      });
+      const data = await res.json();
+      if (data.success) {
+        UI.showToast(data.message, 'ok');
+        setTimeout(() => location.hash = '#/', 800);
+      } else {
+        UI.showToast(data.message || '操作失败', 'err');
+      }
+    } catch {
+      UI.showToast('操作失败', 'err');
+    }
+    return;
+  }
+  
+  // 通过：先获取违规信息
+  const violation = await API.getPostViolation(postId);
+  const hasViolation = violation && (violation.violations?.length > 0 || violation.hasCover);
+  
+  if (hasViolation) {
+    let html = '<div style="max-height:400px;overflow-y:auto;padding:8px">';
+    
+    if (violation.hasCover) {
+      const coverLabel = violation.isNewCover ? '📷 新增封面图片' : '📷 包含封面图片';
+      const coverDesc = violation.isNewCover ? '修改内容包含新的封面图片，需要人工审核' : '文章包含封面图片，需要人工审核';
+      html += `<div style="margin-bottom:16px;padding:12px;background:rgba(251,191,36,.1);border-radius:8px;border:1px solid rgba(251,191,36,.3)">
+        <div style="font-weight:600;color:#fbbf24;margin-bottom:6px">${coverLabel}</div>
+        <div style="font-size:13px;color:var(--t2)">${coverDesc}</div>
+      </div>`;
+    }
+    
+    if (violation.violations?.length > 0) {
+      html += `<div style="font-weight:600;margin-bottom:12px;color:var(--t1);display:flex;align-items:center;gap:8px">
+        <span style="color:#ef4444">⚠️</span>
+        <span>发现 ${violation.violations.length} 处违规内容</span>
+      </div>`;
+      
+      violation.violations.forEach((v, i) => {
+        html += `<div style="margin-bottom:12px;padding:10px;background:rgba(239,68,68,.08);border-radius:8px;border-left:3px solid #ef4444">
+          <div style="font-size:11px;color:#ef4444;margin-bottom:4px;font-weight:600">${v.type === 'title' ? '标题' : v.type === 'summary' ? '摘要' : '正文'} - 第 ${i + 1} 处</div>
+          <div style="font-size:13px;color:var(--t1);line-height:1.5">
+            <span style="background:rgba(239,68,68,.2);padding:1px 4px;border-radius:4px">敏感词: ${escHtml(v.word)}</span>
+            ${v.context ? `<br><span style="color:var(--t3)">上下文: ...${escHtml(v.context)}...</span>` : ''}
+          </div>
+        </div>`;
+      });
+    }
+    html += '</div>';
+    
+    if (!await UI.showConfirm({
+      title: '⚠️ 通过审核（含违规内容）',
+      message: html,
+      confirmText: '仍要通过',
+      type: 'danger',
+      dangerouslyUseHTML: true
+    })) return;
+  } else {
+    // 无违规，弹普通确认框
+    const post = await API.getPost(postId);
+    const isModifyReview = !!(post?.pending_title);
+    const title = isModifyReview ? '通过修改' : '通过审核';
+    const message = isModifyReview
+      ? '确定通过此文章的修改吗？修改后的内容将替换原内容正式发布。'
+      : '确定通过此文章的审核吗？审核通过后文章将发布至平台。';
+    if (!await UI.showConfirm({ title, message, confirmText: '确定', type: 'info' })) return;
+  }
+  
   try {
     const res = await fetch(`${API_BASE}/admin/posts/${postId}/review`, {
       method: 'PUT', headers: jsonH(),
-      body: JSON.stringify({ action })
+      body: JSON.stringify({ action: 'approve' })
     });
     const data = await res.json();
     if (data.success) {
       UI.showToast(data.message, 'ok');
-      // 审核通过刷新，审核拒绝跳转首页
-      if (action === 'approve') {
-        location.reload();
-      } else {
-        setTimeout(() => location.hash = '#/', 800);
-      }
+      location.reload();
     } else {
       UI.showToast(data.message || '操作失败', 'err');
     }
   } catch {
     UI.showToast('操作失败', 'err');
+  }
+}
+
+// 封禁博客（管理员）
+async function banPost(postId) {
+  const reason = await UI.showPrompt({
+    title: '封禁博客',
+    message: '请输入封禁理由，作者将看到此理由并需要修改后重新提交审核。',
+    confirmText: '确认封禁',
+    cancelText: '取消',
+    type: 'danger',
+    placeholder: '例如：包含违规内容、侵犯版权等...'
+  });
+  if (!reason || !reason.trim()) return;
+  
+  try {
+    const res = await fetch(`${API_BASE}/admin/posts/${postId}/ban`, {
+      method: 'POST',
+      headers: jsonH(),
+      body: JSON.stringify({ reason: reason.trim() })
+    });
+    const data = await res.json();
+    if (data.success) {
+      UI.showToast('博客已封禁', 'ok');
+      location.reload();
+    } else {
+      UI.showToast(data.message || '封禁失败', 'err');
+    }
+  } catch {
+    UI.showToast('封禁失败', 'err');
+  }
+}
+
+// 解封博客（管理员）
+async function unbanPost(postId) {
+  if (!await UI.showConfirm({
+    title: '解封博客',
+    message: '确定要解封此博客吗？解封后文章将恢复正常显示。',
+    confirmText: '确认解封',
+    type: 'info'
+  })) return;
+  
+  try {
+    const res = await fetch(`${API_BASE}/admin/posts/${postId}/unban`, {
+      method: 'POST',
+      headers: jsonH()
+    });
+    const data = await res.json();
+    if (data.success) {
+      UI.showToast('博客已解封', 'ok');
+      location.reload();
+    } else {
+      UI.showToast(data.message || '解封失败', 'err');
+    }
+  } catch {
+    UI.showToast('解封失败', 'err');
   }
 }
 

@@ -320,9 +320,17 @@ async function publishPost(editId) {
       try { await API.deleteDraft('post:' + editId); } catch {}
     }
     
+    console.log('[DEBUG] publishPost response:', JSON.stringify(res, null, 2));
     const newPost = res.data;
-    const postId = newPost.id || editId;
-    const status = newPost.status;
+    console.log('[DEBUG] newPost:', newPost);
+    const postId = newPost?.id || editId;
+    const status = newPost?.status;
+    
+    if (!postId) {
+      UI.showToast('发布成功，但无法获取文章ID', 'err');
+      console.error('Missing postId in response:', res);
+      return;
+    }
     
     if (editId) {
       // 编辑模式
@@ -533,6 +541,29 @@ async function renderNotifications(pageNum = 1) {
       return;
     }
     container.innerHTML = list.map(n => {
+      // ban/unban：系统通知风格，不走通用格式
+      if (n.type === 'ban') {
+        return `
+        <a href="${n.post_id ? `#/post/${n.post_id}` : '#/'}" class="notif-item${n.is_read ? '' : ' unread'}" data-nid="${n.id}">
+          <div class="notif-icon">🔒</div>
+          <div class="notif-body">
+            <div class="notif-main">你的文章${n.post_title ? `《${escHtml(n.post_title)}》` : ''}已被封禁${n.content ? `，${escHtml(n.content)}` : ''}</div>
+            <div class="notif-time">${UI.formatTimeAgo(n.created_at)}</div>
+          </div>
+          ${n.is_read ? '' : '<span class="notif-dot"></span>'}
+        </a>`;
+      }
+      if (n.type === 'unban') {
+        return `
+        <a href="${n.post_id ? `#/post/${n.post_id}` : '#/'}" class="notif-item${n.is_read ? '' : ' unread'}" data-nid="${n.id}">
+          <div class="notif-icon">🔓</div>
+          <div class="notif-body">
+            <div class="notif-main">你的文章${n.post_title ? `《${escHtml(n.post_title)}》` : ''}已解除封禁</div>
+            <div class="notif-time">${UI.formatTimeAgo(n.created_at)}</div>
+          </div>
+          ${n.is_read ? '' : '<span class="notif-dot"></span>'}
+        </a>`;
+      }
       const typeMap = {
         comment: ['评论了你的文章', '💬'], like: ['赞了你的文章', '❤️'], favorite: ['收藏了你的文章', '⭐'],
         follow: ['关注了你', '👤'], reply: ['回复了你的评论', '💬'],
@@ -552,7 +583,8 @@ async function renderNotifications(pageNum = 1) {
         <a href="${link}" class="notif-item${n.is_read ? '' : ' unread'}" data-nid="${n.id}">
           <div class="notif-icon">${icon}</div>
           <div class="notif-body">
-            <div class="notif-main"><strong>${escHtml(n.from_name)}</strong> ${action}${n.post_title ? '《${escHtml(n.post_title)}》' : ''}</div>
+            <div class="notif-main"><strong>${escHtml(n.from_name)}</strong> ${action}${n.post_title ? `《${escHtml(n.post_title)}》` : ''}</div>
+            ${n.content ? `<div class="notif-msg" style="font-size:12px;color:var(--t2);margin-top:2px">${escHtml(n.content)}</div>` : ''}
             <div class="notif-time">${UI.formatTimeAgo(n.created_at)}</div>
           </div>
           ${n.is_read ? '' : '<span class="notif-dot"></span>'}

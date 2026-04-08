@@ -36,6 +36,12 @@ async function initDB() {
       "ALTER TABLE posts ADD COLUMN pending_content TEXT DEFAULT ''",
       "ALTER TABLE posts ADD COLUMN pending_cover TEXT DEFAULT ''",
       "ALTER TABLE posts ADD COLUMN pending_tags TEXT DEFAULT ''",
+      "ALTER TABLE posts ADD COLUMN approved_title TEXT DEFAULT ''",
+      "ALTER TABLE posts ADD COLUMN approved_summary TEXT DEFAULT ''",
+      "ALTER TABLE posts ADD COLUMN approved_content TEXT DEFAULT ''",
+      "ALTER TABLE posts ADD COLUMN approved_at TEXT DEFAULT ''",
+      "ALTER TABLE posts ADD COLUMN ban_reason TEXT DEFAULT ''",
+      "ALTER TABLE posts ADD COLUMN reject_reason TEXT DEFAULT ''",
     ];
     migrations.forEach(sql => { try { db.run(sql); } catch {} });
 
@@ -130,7 +136,9 @@ async function initDB() {
     updated_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
     pending_title TEXT DEFAULT '', pending_summary TEXT DEFAULT '',
     pending_content TEXT DEFAULT '', pending_cover TEXT DEFAULT '',
-    pending_tags TEXT DEFAULT ''
+    pending_tags TEXT DEFAULT '',
+    approved_title TEXT DEFAULT '', approved_summary TEXT DEFAULT '',
+    approved_content TEXT DEFAULT '', approved_at TEXT DEFAULT ''
   )`);
   db.run(`CREATE TABLE post_tags (
     post_id TEXT NOT NULL REFERENCES posts(id), tag_id TEXT NOT NULL REFERENCES tags(id),
@@ -428,15 +436,23 @@ function qa(sql, params = []) {
 }
 
 function run(sql, params = []) {
-  try { db.run(sql, params); return true; } catch (e) { console.error('SQL:', sql, e.message); return false; }
+  try { 
+    console.log('[DEBUG] run() 执行 SQL:', sql.substring(0, 100), '... 参数:', params);
+    db.run(sql, params); 
+    console.log('[DEBUG] run() 执行成功');
+    return true; 
+  } catch (e) { 
+    console.error('SQL 执行错误:', sql, e.message); 
+    return false; 
+  }
 }
 
 function ok(res, data, status = 200) { res.status(status).json({ success: true, ...data }); }
 function fail(res, message, status = 400) { res.status(status).json({ success: false, message }); }
 
 // ===================== UTILITY FUNCTIONS =====================
-function notify(userId, fromUserId, type, postId = '') {
-  try { run('INSERT INTO notifications (user_id,from_user_id,type,post_id) VALUES (?,?,?,?)', [userId, fromUserId, type, postId]); saveDB(); } catch {}
+function notify(userId, fromUserId, type, postId = '', content = '') {
+  try { run('INSERT INTO notifications (user_id,from_user_id,type,post_id,content) VALUES (?,?,?,?,?)', [userId, fromUserId, type, postId, content]); saveDB(); } catch {}
 }
 
 function getBan(userId) {

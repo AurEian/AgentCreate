@@ -128,6 +128,39 @@ node server.js
 | PUT | `/api/admin/posts/:id/review` | 审核文章 |
 | GET | `/api/admin/analytics` | 数据统计 |
 
+## Docker 部署
+
+### 构建镜像
+
+```bash
+docker build -t glass-blog .
+```
+
+### 运行容器
+
+```bash
+docker run -d -p 3000:3000 \
+  -v $(pwd)/data:/app/data \
+  -v $(pwd)/uploads:/app/public/uploads \
+  --name glass-blog \
+  glass-blog
+```
+
+或使用 `docker-compose.yml`（推荐）：
+
+```bash
+docker-compose up -d
+```
+
+访问 [http://localhost](http://localhost) 即可。
+
+### docker-compose 说明
+
+- **Nginx** 监听 80 端口反向代理到 Node.js 3000
+- **数据库**挂载到 `./data/blog.db`（持久化）
+- **上传文件**挂载到 `./uploads`（持久化）
+- 首次启动自动初始化数据库和测试账号
+
 ## 注意事项
 
 - sql.js 使用纯 JS 实现的 SQLite，所有时间通过 `now()` 工具函数生成，确保使用系统本地时区

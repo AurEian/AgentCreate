@@ -2,8 +2,24 @@
  * src/routes/posts.js - 文章 CRUD、草稿、标签、搜索、关于
  */
 const { randomUUID } = require('crypto');
+const fs = require('fs');
+const path = require('path');
 const { q1, qa, run, saveDB, ok, fail, getBan, logAudit, notify, now } = require('../db');
-const { requireAuth } = require('../middleware/auth');
+const { requireAuth, optionalAuth } = require('../middleware/auth');
+
+// 从 public/uploads 目录随机选一张图片作为默认封面
+function getRandomDefaultCover() {
+  try {
+    const uploadsDir = path.join(__dirname, '../../public/uploads');
+    const files = fs.readdirSync(uploadsDir).filter(f => /\.(jpg|jpeg|png|gif|webp)$/i.test(f));
+    if (files.length === 0) return '';
+    const picked = files[Math.floor(Math.random() * files.length)];
+    return `/uploads/${picked}`;
+  } catch {
+    return '';
+  }
+}
+
 
 // 从数据库加载敏感词
 function getSensitiveWords() {
@@ -19,6 +35,41 @@ function checkSensitiveWords(text) {
     if (lower.includes(word)) return word;
   }
   return null;
+}
+
+// 检查敏感词，返回所有匹配及上下文信息
+function checkSensitiveWordsWithContext(text) {
+  if (!text) return [];
+  const words = getSensitiveWords();
+  const lower = text.toLowerCase();
+  const violations = [];
+  for (const word of words) {
+    let idx = lower.indexOf(word);
+    while (idx !== -1) {
+      // 获取上下文（前后各30个字符）
+      const start = Math.max(0, idx - 30);
+      const end = Math.min(text.length, idx + word.length + 30);
+      let context = text.slice(start, end);
+      if (start > 0) context = '...' + context;
+      if (end < text.length) context = context + '...';
+      violations.push({ word, context, pos: idx });
+      // 继续查找下一个匹配
+      idx = lower.indexOf(word, idx + 1);
+    }
+  }
+  return violations;
+}
+
+// 提取新增/修改的内容（与已审核内容对比）
+function getDeltaContent(newContent, approvedContent) {
+  if (!approvedContent) return newContent; // 没有已审核内容，全部视为新增
+  if (!newContent) return '';
+  // 简单实现：如果新内容包含已审核内容，取差值
+  // 实际应该用 diff 算法，这里先用简单方式：按段落对比
+  const newParas = newContent.split(/\n+/);
+  const approvedParas = approvedContent.split(/\n+/);
+  const delta = newParas.filter(p => !approvedParas.includes(p));
+  return delta.join('\n');
 }
 
 function setupPostRoutes(app) {
@@ -48,9 +99,22 @@ function setupPostRoutes(app) {
   });
 
   // 获取文章详情
-  app.get('/api/posts/:id', (req, res) => {
+  app.get('/api/posts/:id', optionalAuth, (req, res) => {
+    console.log('[DEBUG] GET /api/posts/:id, req.params.id=', req.params.id);
     const post = q1(`SELECT p.*, u.name as author, u.id as authorId, u.avatar as author_avatar FROM posts p JOIN users u ON p.user_id=u.id WHERE p.id = ?`, [req.params.id]);
+    console.log('[DEBUG] 查询结果:', post ? '找到文章' : '未找到');
     if (!post) return fail(res, '文章不存在', 404);
+    
+    // 检查文章是否被封禁
+    if (post.status === 'banned') {
+      // 只有管理员或作者本人可以查看被封禁的文章
+      const isAdmin = req.user && req.user.role === 'admin';
+      const isAuthor = req.user && req.user.id === post.user_id;
+      if (!isAdmin && !isAuthor) {
+        return fail(res, '该文章因违规已被封禁', 403);
+      }
+    }
+    
     const tRows = qa(`SELECT t.name FROM tags t JOIN post_tags pt ON pt.tag_id=t.id WHERE pt.post_id=?`, [post.id]);
     const commentCount = q1('SELECT COUNT(*) as c FROM comments WHERE post_id=?', [post.id])?.c || 0;
     run('UPDATE posts SET views=views+1 WHERE id=?', [post.id]);
@@ -62,7 +126,8 @@ function setupPostRoutes(app) {
   app.post('/api/posts', requireAuth, (req, res) => {
     const ban = getBan(req.user.id);
     if (ban) return fail(res, `你已被封禁，无法发布文章。原因：${ban.reason}`, 403);
-    const { title, summary, content, tags = [], cover = '' } = req.body;
+    const { title, summary, content, tags = [] } = req.body;
+    const cover = req.body.cover || getRandomDefaultCover();
     if (!title || !content) return fail(res, '标题和内容不能为空');
 
     // 检查敏感词
@@ -85,7 +150,7 @@ function setupPostRoutes(app) {
     }
 
     const id = randomUUID();
-    run('INSERT INTO posts VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)', [id, req.user.id, title.trim(), (summary || '').trim(), content, cover, status, 0, 0, now(), now(), '', '', '', '', '']);
+    run('INSERT INTO posts VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)', [id, req.user.id, title.trim(), (summary || '').trim(), content, cover, status, 0, 0, now(), now(), '', '', '', '', '', '', '', '', '']);
     for (const tagName of tags) {
       let existing = q1('SELECT id FROM tags WHERE name = ?', [tagName]);
       if (!existing) { const tid = randomUUID(); run('INSERT INTO tags VALUES (?,?)', [tid, tagName]); existing = { id: tid }; }
@@ -107,34 +172,56 @@ function setupPostRoutes(app) {
     if (post.user_id !== req.user.id && req.user.role !== 'admin') return fail(res, '无权编辑此文章', 403);
     const { title, summary, content, tags, cover } = req.body;
 
-    // 非管理员修改已发布/已拒绝文章 → pending 机制（检查敏感词）
-    if (req.user.role !== 'admin' && (post.status === 'published' || post.status === 'rejected')) {
+    // 非管理员修改已发布/已拒绝/被封禁文章 → pending 机制（检查敏感词）
+    if (req.user.role !== 'admin' && (post.status === 'published' || post.status === 'rejected' || post.status === 'banned')) {
       const newTitle = title !== undefined ? title.trim() : post.title;
       const newSummary = summary !== undefined ? (summary || '').trim() : post.summary;
       const newContent = content || post.content;
       const newCover = cover || null;
       const newTags = tags ? JSON.stringify(tags) : '';
       
-      // 检查新内容是否含敏感词
-      const fullText = `${newTitle} ${newSummary} ${newContent}`;
-      const matchedWord = checkSensitiveWords(fullText);
+      // 获取已审核通过的内容（用于增量检测）
+      const approvedTitle = post.approved_title || post.title;
+      const approvedSummary = post.approved_summary || post.summary || '';
+      const approvedContent = post.approved_content || post.content;
+      
+      // 提取新增/修改的内容
+      const deltaTitle = getDeltaContent(newTitle, approvedTitle);
+      const deltaSummary = getDeltaContent(newSummary, approvedSummary);
+      const deltaContent = getDeltaContent(newContent, approvedContent);
+      
+      // 只检查新增/修改部分是否含敏感词
+      const deltaText = `${deltaTitle} ${deltaSummary} ${deltaContent}`;
+      const matchedWord = checkSensitiveWords(deltaText);
       
       if (!matchedWord) {
-        // 无敏感词，直接发布新版本
-        run('UPDATE posts SET title=?, summary=?, content=?, cover=?, tags=?, status=?, updated_at=? WHERE id=?',
-          [newTitle, newSummary, newContent, newCover, newTags, 'published', now(), req.params.id]);
-        logAudit(req.user.id, 'edit_post', req.params.id, newTitle);
+        // 无敏感词，直接发布新版本（如果是被封禁的文章，解封并发布）
+        console.log('[DEBUG] Updating post', req.params.id, 'with title:', newTitle);
+        // 如果被禁文章修改后无敏感词，清空 ban_reason 并发布
+        run('UPDATE posts SET title=?, summary=?, content=?, cover=?, status=? , ban_reason=? , updated_at=? WHERE id=?',
+          [newTitle, newSummary, newContent, newCover, 'published', '', now(), req.params.id]);
+        console.log('[DEBUG] SQL executed, saving DB...');
+        logAudit(req.user.id, post.status === 'banned' ? 'unban_and_edit' : 'edit_post', req.params.id, newTitle);
         saveDB();
-        return ok(res, { message: '修改已发布', data: { id: req.params.id, status: 'published' }, matchedWord: null });
+        console.log('[DEBUG] DB saved');
+        const msg = post.status === 'banned' ? '博客已解封并发布' : '修改已发布';
+        return ok(res, { message: msg, data: { id: req.params.id, status: 'published' }, matchedWord: null });
       } else {
-        // 有敏感词，存入 pending 等待审核
-        run('UPDATE posts SET pending_title=?, pending_summary=?, pending_content=?, pending_cover=?, pending_tags=?, status=?, updated_at=? WHERE id=?',
-          [newTitle, newSummary, newContent, newCover, newTags, 'pending', now(), req.params.id]);
+        // 有敏感词，存入 pending 等待审核（被封禁文章保持 banned 状态，但保存修改内容）
+        if (post.status === 'banned') {
+          // 被封禁文章有敏感词，保存修改内容但不改变状态，等待管理员审核
+          run('UPDATE posts SET pending_title=?, pending_summary=?, pending_content=?, pending_cover=?, pending_tags=?, updated_at=? WHERE id=?',
+            [newTitle, newSummary, newContent, newCover, newTags, now(), req.params.id]);
+        } else {
+          run('UPDATE posts SET pending_title=?, pending_summary=?, pending_content=?, pending_cover=?, pending_tags=?, status=?, updated_at=? WHERE id=?',
+            [newTitle, newSummary, newContent, newCover, newTags, 'pending', now(), req.params.id]);
+        }
         const admins = qa('SELECT id FROM users WHERE role="admin"');
         admins.forEach(a => notify(a.id, req.user.id, 'review', req.params.id));
         logAudit(req.user.id, 'edit_post', req.params.id, newTitle);
         saveDB();
-        return ok(res, { message: '修改含敏感内容，已提交审核', data: { id: req.params.id, status: 'pending' }, matchedWord });
+        const msg = post.status === 'banned' ? '修改已保存，等待管理员审核后解封' : '修改含敏感内容，已提交审核';
+        return ok(res, { message: msg, data: { id: req.params.id, status: post.status === 'banned' ? 'banned' : 'pending' }, matchedWord });
       }
     }
 

@@ -534,4 +534,37 @@ function showConfirm({ title, message, confirmText = '确定', cancelText = '取
   });
 }
 
-window.UI = { showToast, formatDate, formatTimeAgo, avatarHtml, showConfirm };
+// Prompt Dialog (input)
+function showPrompt({ title, message, confirmText = '确定', cancelText = '取消', type = 'info', placeholder = '' }) {
+  return new Promise((resolve) => {
+    const icons = {
+      warn: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>',
+      danger: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><path d="M12 9v4M12 17h.01"/></svg>',
+      info: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>'
+    };
+    const bg = document.createElement('div');
+    bg.className = 'modal-bg';
+    bg.innerHTML = `
+      <div class="confirm-dialog" style="max-width:420px">
+        <div class="confirm-icon confirm-icon-${type}">${icons[type] || icons.info}</div>
+        <div class="confirm-title">${title || '请输入'}</div>
+        <div class="confirm-msg">${message || ''}</div>
+        <div style="margin:16px 0">
+          <input type="text" class="form-input" id="prompt-input" placeholder="${placeholder}" style="width:100%">
+        </div>
+        <div class="confirm-actions">
+          <button class="btn btn-ghost confirm-cancel">${cancelText}</button>
+          <button class="btn confirm-ok confirm-ok-${type}">${confirmText}</button>
+        </div>
+      </div>`;
+    document.body.appendChild(bg);
+    const input = bg.querySelector('#prompt-input');
+    input.focus();
+    bg.querySelector('.confirm-cancel').onclick = () => { bg.remove(); resolve(null); };
+    bg.querySelector('.confirm-ok').onclick = () => { const val = input.value; bg.remove(); resolve(val); };
+    input.addEventListener('keypress', (e) => { if (e.key === 'Enter') { const val = input.value; bg.remove(); resolve(val); } });
+    bg.addEventListener('click', (e) => { if (e.target === bg) { bg.remove(); resolve(null); } });
+  });
+}
+
+window.UI = { showToast, formatDate, formatTimeAgo, avatarHtml, showConfirm, showPrompt };
