@@ -150,7 +150,7 @@ function setupPostRoutes(app) {
     }
 
     const id = randomUUID();
-    run('INSERT INTO posts VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)', [id, req.user.id, title.trim(), (summary || '').trim(), content, cover, status, 0, 0, now(), now(), '', '', '', '', '', '', '', '', '']);
+    run('INSERT INTO posts VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)', [id, req.user.id, title.trim(), (summary || '').trim(), content, cover, status, 0, 0, now(), now(), '', '', '', '', '', '', '', '', '', '']);
     for (const tagName of tags) {
       let existing = q1('SELECT id FROM tags WHERE name = ?', [tagName]);
       if (!existing) { const tid = randomUUID(); run('INSERT INTO tags VALUES (?,?)', [tid, tagName]); existing = { id: tid }; }
