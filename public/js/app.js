@@ -432,6 +432,13 @@ window.addEventListener('hashchange', router);
 document.addEventListener('DOMContentLoaded', async () => {
   const theme = localStorage.getItem('theme') || 'dark';
   document.documentElement.setAttribute('data-theme', theme);
+  // 同步代码高亮主题
+  const hljsLink = document.getElementById('hljs-theme');
+  if (hljsLink) {
+    hljsLink.href = theme === 'dark'
+      ? 'https://cdn.staticfile.org/highlight.js/11.9.0/styles/github-dark.min.css'
+      : 'https://cdn.staticfile.org/highlight.js/11.9.0/styles/github.min.css';
+  }
 
   currentUser = await getMe();
   window._currentUser = currentUser; // 暴露给 pages3.js 等模块使用
@@ -474,6 +481,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     const next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
     document.documentElement.setAttribute('data-theme', next);
     localStorage.setItem('theme', next);
+    // 同步切换代码高亮主题
+    const hljsLink = document.getElementById('hljs-theme');
+    if (hljsLink) {
+      hljsLink.href = next === 'dark'
+        ? 'https://cdn.staticfile.org/highlight.js/11.9.0/styles/github-dark.min.css'
+        : 'https://cdn.staticfile.org/highlight.js/11.9.0/styles/github.min.css';
+    }
   });
 
   router();

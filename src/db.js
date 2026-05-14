@@ -42,6 +42,16 @@ async function initDB() {
       "ALTER TABLE posts ADD COLUMN approved_at TEXT DEFAULT ''",
       "ALTER TABLE posts ADD COLUMN ban_reason TEXT DEFAULT ''",
       "ALTER TABLE posts ADD COLUMN reject_reason TEXT DEFAULT ''",
+      "ALTER TABLE posts ADD COLUMN reviewer_id TEXT DEFAULT ''",
+      "ALTER TABLE posts ADD COLUMN reviewer_claimed_at TEXT DEFAULT ''",
+      "ALTER TABLE posts ADD COLUMN reviewed_by TEXT DEFAULT ''",
+      // 文章指派：assigned_to = 被指派审核的管理员ID，assigned_at = 指派时间
+      "ALTER TABLE posts ADD COLUMN assigned_to TEXT DEFAULT ''",
+      "ALTER TABLE posts ADD COLUMN assigned_at TEXT DEFAULT ''",
+      // 用户表：last_assigned_at 用于轮换分配（记录上次被指派的时间，越早越优先）
+      "ALTER TABLE users ADD COLUMN last_assigned_at TEXT DEFAULT ''",
+      // 把第一个 admin 账号升级为 super_admin（只在没有 super_admin 时触发）
+      `UPDATE users SET role='super_admin' WHERE role='admin' AND id=(SELECT id FROM users WHERE role='admin' ORDER BY created_at ASC LIMIT 1) AND NOT EXISTS (SELECT 1 FROM users WHERE role='super_admin')`,
     ];
     migrations.forEach(sql => { try { db.run(sql); } catch {} });
 
@@ -90,6 +100,15 @@ async function initDB() {
       `CREATE TABLE IF NOT EXISTS sensitive_words (
         id INTEGER PRIMARY KEY AUTOINCREMENT, word TEXT UNIQUE NOT NULL,
         created_at TEXT DEFAULT (datetime('now','localtime'))
+      )`,
+      `CREATE TABLE IF NOT EXISTS appeals (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id TEXT NOT NULL REFERENCES users(id),
+        reason TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending',
+        admin_note TEXT DEFAULT '',
+        created_at TEXT DEFAULT (datetime('now','localtime')),
+        resolved_at TEXT DEFAULT ''
       )`,
     ];
     tables.forEach(sql => { try { db.run(sql); } catch {} });
@@ -185,10 +204,19 @@ async function initDB() {
     title TEXT NOT NULL, content TEXT NOT NULL,
     created_at TEXT DEFAULT (datetime('now','localtime'))
   )`);
+  db.run(`CREATE TABLE appeals (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id TEXT NOT NULL REFERENCES users(id),
+    reason TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    admin_note TEXT DEFAULT '',
+    created_at TEXT DEFAULT (datetime('now','localtime')),
+    resolved_at TEXT DEFAULT ''
+  )`);
 
   // Seed users
   const seed = [
-    ['u1','admin@example.com','123456','管理员','admin','','','','',0,'2026-01-01 00:00:00'],
+    ['u1','admin@example.com','123456','管理员','super_admin','','','','',0,'2026-01-01 00:00:00'],
     ['u2','test@example.com','test123','测试用户','user','','','','',0,'2026-02-15 10:00:00'],
     ['u3','demo@example.com','demo','演示账户','user','','','','',0,'2026-03-01 08:00:00'],
   ];

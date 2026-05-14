@@ -22,8 +22,13 @@ function optionalAuth(req, res, next) {
 }
 
 function requireAdmin(req, res, next) {
-  if (req.user.role !== 'admin') return fail(res, '需要管理员权限', 403);
+  if (req.user.role !== 'admin' && req.user.role !== 'super_admin') return fail(res, '需要管理员权限', 403);
   next();
 }
 
-module.exports = { requireAuth, optionalAuth, requireAdmin };
+function requireSuperAdmin(req, res, next) {
+  if (req.user.role !== 'super_admin') return fail(res, '需要超级管理员权限', 403);
+  next();
+}
+
+module.exports = { requireAuth, optionalAuth, requireAdmin, requireSuperAdmin };

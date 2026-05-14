@@ -622,7 +622,7 @@ async function adminDeletePost(id) {
   try {
     await API.deletePost(id);
     UI.showToast('文章已删除', 'ok');
-    loadAdminPosts();
+    location.reload();
   } catch {
     UI.showToast('删除失败', 'err');
   }
@@ -652,7 +652,7 @@ async function reviewPost(id, action) {
       const data = await res.json();
       if (data.success) {
         UI.showToast(data.message, 'ok');
-        loadAdminPosts();
+        location.reload();
       } else {
         UI.showToast(data.message || '操作失败', 'err');
       }
@@ -723,7 +723,7 @@ async function reviewPost(id, action) {
     const data = await res.json();
     if (data.success) {
       UI.showToast(data.message, 'ok');
-      loadAdminPosts();
+      location.reload();
     } else {
       UI.showToast(data.message || '操作失败', 'err');
     }
@@ -753,7 +753,7 @@ async function banPost(id) {
     const data = await res.json();
     if (data.success) {
       UI.showToast(data.message, 'ok');
-      loadAdminPosts();
+      location.reload();
     } else {
       UI.showToast(data.message || '操作失败', 'err');
     }
@@ -770,7 +770,7 @@ async function unbanPost(id) {
     const data = await res.json();
     if (data.success) {
       UI.showToast(data.message, 'ok');
-      loadAdminPosts();
+      location.reload();
     } else {
       UI.showToast(data.message || '操作失败', 'err');
     }
@@ -792,7 +792,7 @@ async function claimPost(id) {
     });
     const data = await res.json();
     if (data.success) {
-      loadAdminPosts(); // 刷新列表让其他管理员看到
+      // 不刷新列表，避免依赖 #admin-tab-posts（详情页不存在此元素）
       return true;
     }
     // 403 = 无权操作（不是你的指派）
@@ -820,7 +820,7 @@ async function claimPost(id) {
         method: 'POST', headers: jsonH()
       });
       const data2 = await res2.json();
-      if (data2.success) { loadAdminPosts(); return true; }
+      if (data2.success) { location.reload(); return true; }
       UI.showToast(data2.message || '抢占失败', 'err');
       return false;
     }

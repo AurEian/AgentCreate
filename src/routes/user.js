@@ -1,7 +1,7 @@
 /**
  * src/routes/user.js - 用户资料/密码/关注
  */
-const { q1, qa, run, saveDB, ok, fail, notify, now } = require('../db');
+const { q1, qa, run, saveDB, ok, fail, notify, now, getBan } = require('../db');
 const { requireAuth, optionalAuth } = require('../middleware/auth');
 
 function setupUserRoutes(app) {
@@ -132,6 +132,34 @@ function checkSensitive(text) {
     if (!userId) return ok(res, { data: { following: false } });
     const exists = q1('SELECT 1 FROM follows WHERE follower_id=? AND following_id=?', [req.user.id, userId]);
     ok(res, { data: { following: !!exists } });
+  });
+
+  // ===================== 申诉（用户端）=====================
+
+  // 提交解封申诉
+  app.post('/api/user/appeal', requireAuth, (req, res) => {
+    const ban = getBan(req.user.id);
+    if (!ban) return fail(res, '你当前未被封禁，无需申诉', 400);
+    const { reason } = req.body;
+    if (!reason || !reason.trim()) return fail(res, '请填写申诉理由', 400);
+    // 检查是否有未处理的申诉
+    const pending = q1('SELECT id FROM appeals WHERE user_id=? AND status=?', [req.user.id, 'pending']);
+    if (pending) return fail(res, '你已有一个待处理的申诉，请等待管理员处理', 400);
+    run('INSERT INTO appeals (user_id, reason) VALUES (?,?)', [req.user.id, reason.trim()]);
+    // 通知所有管理员
+    const admins = qa(`SELECT id FROM users WHERE role IN ('admin','super_admin')`);
+    admins.forEach(a => {
+      notify(a.id, req.user.id, 'appeal', '', `用户 ${req.user.name} 提交了解封申诉`);
+    });
+    saveDB();
+    ok(res, { message: '申诉已提交，请等待管理员处理' });
+  });
+
+  // 查询自己的申诉状态
+  app.get('/api/user/appeal', requireAuth, (req, res) => {
+    const appeal = q1('SELECT * FROM appeals WHERE user_id=? ORDER BY created_at DESC LIMIT 1', [req.user.id]);
+    const ban = getBan(req.user.id);
+    ok(res, { data: { appeal, ban } });
   });
 }
 
