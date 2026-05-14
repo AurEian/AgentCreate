@@ -564,17 +564,77 @@ async function renderNotifications(pageNum = 1) {
           ${n.is_read ? '' : '<span class="notif-dot"></span>'}
         </a>`;
       }
+      // 用户账号封禁/解封
+      if (n.type === 'user_ban') {
+        return `
+        <div class="notif-item${n.is_read ? '' : ' unread'}" data-nid="${n.id}" style="cursor:default">
+          <div class="notif-icon">🚫</div>
+          <div class="notif-body">
+            <div class="notif-main" style="color:#f87171">你的账号已被封禁</div>
+            ${n.content ? `<div class="notif-msg" style="font-size:12px;color:var(--t2);margin-top:3px">${escHtml(n.content)}</div>` : ''}
+            <div style="margin-top:8px">
+              <button class="btn btn-xs" style="background:rgba(99,102,241,.2);color:var(--accent);border:1px solid rgba(99,102,241,.4)" onclick="event.stopPropagation();showAppealModal()">提交申诉</button>
+            </div>
+            <div class="notif-time">${UI.formatTimeAgo(n.created_at)}</div>
+          </div>
+          ${n.is_read ? '' : '<span class="notif-dot"></span>'}
+        </div>`;
+      }
+      if (n.type === 'user_unban') {
+        return `
+        <div class="notif-item${n.is_read ? '' : ' unread'}" data-nid="${n.id}" style="cursor:default">
+          <div class="notif-icon">✅</div>
+          <div class="notif-body">
+            <div class="notif-main" style="color:#4ade80">你的账号封禁已解除，欢迎回来！</div>
+            <div class="notif-time">${UI.formatTimeAgo(n.created_at)}</div>
+          </div>
+          ${n.is_read ? '' : '<span class="notif-dot"></span>'}
+        </div>`;
+      }
+      if (n.type === 'appeal') {
+        return `
+        <a href="#/admin" class="notif-item${n.is_read ? '' : ' unread'}" data-nid="${n.id}">
+          <div class="notif-icon">📨</div>
+          <div class="notif-body">
+            <div class="notif-main"><strong>${escHtml(n.from_name||'用户')}</strong> 提交了解封申诉</div>
+            <div class="notif-time">${UI.formatTimeAgo(n.created_at)}</div>
+          </div>
+          ${n.is_read ? '' : '<span class="notif-dot"></span>'}
+        </a>`;
+      }
+      if (n.type === 'appeal_approved') {
+        return `
+        <div class="notif-item${n.is_read ? '' : ' unread'}" data-nid="${n.id}" style="cursor:default">
+          <div class="notif-icon">🎉</div>
+          <div class="notif-body">
+            <div class="notif-main" style="color:#4ade80">你的解封申诉已通过，账号已恢复正常！</div>
+            <div class="notif-time">${UI.formatTimeAgo(n.created_at)}</div>
+          </div>
+          ${n.is_read ? '' : '<span class="notif-dot"></span>'}
+        </div>`;
+      }
+      if (n.type === 'appeal_rejected') {
+        return `
+        <div class="notif-item${n.is_read ? '' : ' unread'}" data-nid="${n.id}" style="cursor:default">
+          <div class="notif-icon">❌</div>
+          <div class="notif-body">
+            <div class="notif-main">你的解封申诉已被拒绝</div>
+            ${n.content ? `<div class="notif-msg" style="font-size:12px;color:var(--t2);margin-top:3px">${escHtml(n.content)}</div>` : ''}
+            <div class="notif-time">${UI.formatTimeAgo(n.created_at)}</div>
+          </div>
+          ${n.is_read ? '' : '<span class="notif-dot"></span>'}
+        </div>`;
+      }
       const typeMap = {
         comment: ['评论了你的文章', '💬'], like: ['赞了你的文章', '❤️'], favorite: ['收藏了你的文章', '⭐'],
         follow: ['关注了你', '👤'], reply: ['回复了你的评论', '💬'],
         review: ['提交了新文章待审核', '📝'], approve: ['你的文章已通过审核', '✅'], reject: ['你的文章被拒绝了', '❌'],
-        profile_review: ['提交了资料修改待审核', '👤'], profile_approve: ['你的资料修改已通过', '✅'], profile_reject: ['你的资料修改被拒绝了', '❌'],
-        admin_edit: ['管理员修改了你的文章', '🔧']
+        profile_review: ['提交了资料修改待审核', '👤'], profile_approve: ['你的资料修改已通过', '✅'], profile_reject: ['你的资料修改被拒绝了', '❌']
       };
       const [action, icon] = typeMap[n.type] || ['互动了', '🔔'];
-      // review/admin_edit 类型：管理员收到，链接指向文章详情；approve/reject：作者收到
+      // review 类型：管理员收到，链接指向文章详情；approve/reject：作者收到
       let link;
-      if (n.type === 'review' || n.type === 'approve' || n.type === 'reject' || n.type === 'admin_edit') {
+      if (n.type === 'review' || n.type === 'approve' || n.type === 'reject') {
         link = n.post_id ? `#/post/${n.post_id}` : '#/';
       } else {
         link = n.post_id ? `#/post/${n.post_id}` : `#/profile/${n.from_user_id}`;
@@ -660,4 +720,63 @@ function insertTable() {
   editor.value = editor.value.substring(0, pos) + table + editor.value.substring(pos);
   editor.focus();
   editor.dispatchEvent(new Event('input'));
+}
+
+// ===================== 申诉弹窗 =====================
+async function showAppealModal() {
+  // 检查是否已有待处理申诉
+  try {
+    const data = await API.getMyAppeal();
+    const appeal = data.data?.appeal;
+    if (appeal && appeal.status === 'pending') {
+      UI.showToast('你已有一个待处理的申诉，请等待管理员处理', 'warn');
+      return;
+    }
+  } catch {}
+
+  document.getElementById('appeal-modal-overlay')?.remove();
+  const overlay = document.createElement('div');
+  overlay.id = 'appeal-modal-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.6);backdrop-filter:blur(4px)';
+  overlay.innerHTML = `
+    <div style="background:var(--glass-strong,rgba(20,20,40,.92));border:1px solid var(--glass-b);border-radius:20px;padding:28px 32px;width:420px;max-width:94vw;box-shadow:0 8px 40px rgba(0,0,0,.5)">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:20px">
+        <div style="width:36px;height:36px;background:rgba(99,102,241,.2);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px">📨</div>
+        <div>
+          <div style="font-size:15px;font-weight:700;color:var(--t1)">提交解封申诉</div>
+          <div style="font-size:12px;color:var(--t3);margin-top:2px">管理员将尽快处理你的申诉</div>
+        </div>
+      </div>
+      <div style="margin-bottom:20px">
+        <label style="font-size:13px;color:var(--t2);display:block;margin-bottom:6px">申诉理由 <span style="color:#f87171">*</span></label>
+        <textarea id="appeal-reason" rows="4" placeholder="请详细说明你的申诉理由，包括：为什么认为封禁有误，或者承诺改正的内容等..." style="width:100%;box-sizing:border-box;background:var(--glass);border:1px solid var(--glass-b);border-radius:10px;color:var(--t1);padding:10px 12px;font-size:14px;resize:vertical;font-family:inherit"></textarea>
+      </div>
+      <div style="display:flex;gap:10px;justify-content:flex-end">
+        <button id="appeal-cancel" class="btn btn-ghost">取消</button>
+        <button id="appeal-submit" class="btn btn-primary">提交申诉</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  document.getElementById('appeal-cancel').onclick = () => overlay.remove();
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+  document.getElementById('appeal-submit').onclick = async () => {
+    const reason = document.getElementById('appeal-reason').value.trim();
+    if (!reason) { UI.showToast('请填写申诉理由', 'warn'); return; }
+    const btn = document.getElementById('appeal-submit');
+    btn.disabled = true; btn.textContent = '提交中...';
+    try {
+      const res = await API.submitAppeal(reason);
+      if (res.success) {
+        overlay.remove();
+        UI.showToast('申诉已提交，请等待管理员处理', 'ok');
+      } else {
+        UI.showToast(res.message || '提交失败', 'err');
+        btn.disabled = false; btn.textContent = '提交申诉';
+      }
+    } catch {
+      UI.showToast('提交失败', 'err');
+      btn.disabled = false; btn.textContent = '提交申诉';
+    }
+  };
 }

@@ -107,8 +107,8 @@ function setupPostRoutes(app) {
     
     // 检查文章是否被封禁
     if (post.status === 'banned') {
-      // 只有管理员或作者本人可以查看被封禁的文章
-      const isAdmin = req.user && req.user.role === 'admin';
+      // 只有管理员（含超管）或作者本人可以查看被封禁的文章
+      const isAdmin = req.user && (req.user.role === 'admin' || req.user.role === 'super_admin');
       const isAuthor = req.user && req.user.id === post.user_id;
       if (!isAdmin && !isAuthor) {
         return fail(res, '该文章因违规已被封禁', 403);
@@ -150,7 +150,7 @@ function setupPostRoutes(app) {
     }
 
     const id = randomUUID();
-    run('INSERT INTO posts VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)', [id, req.user.id, title.trim(), (summary || '').trim(), content, cover, status, 0, 0, now(), now(), '', '', '', '', '', '', '', '', '', '']);
+    run('INSERT INTO posts VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)', [id, req.user.id, title.trim(), (summary || '').trim(), content, cover, status, 0, 0, now(), now(), '', '', '', '', '', '', '', '', '', '', '', '']);
     for (const tagName of tags) {
       let existing = q1('SELECT id FROM tags WHERE name = ?', [tagName]);
       if (!existing) { const tid = randomUUID(); run('INSERT INTO tags VALUES (?,?)', [tid, tagName]); existing = { id: tid }; }
@@ -158,8 +158,14 @@ function setupPostRoutes(app) {
     }
     logAudit(req.user.id, status === 'published' ? 'publish_post' : 'submit_post', id, title);
     if (status === 'pending') {
-      const admins = qa('SELECT id FROM users WHERE role="admin"');
-      admins.forEach(a => notify(a.id, req.user.id, 'review', id));
+      // 轮换指派：找出上次分配时间最早的管理员（非超管），指派给他
+      const admins = qa('SELECT id FROM users WHERE role IN ("admin","super_admin") ORDER BY last_assigned_at ASC NULLS FIRST LIMIT 1');
+      if (admins.length > 0) {
+        const assignedAdmin = admins[0].id;
+        run('UPDATE posts SET assigned_to=?, assigned_at=? WHERE id=?', [assignedAdmin, now(), id]);
+        run('UPDATE users SET last_assigned_at=? WHERE id=?', [now(), assignedAdmin]);
+        notify(assignedAdmin, req.user.id, 'review', id);
+      }
     }
     saveDB();
     ok(res, { message, data: { id, title, status }, matchedWord });
@@ -169,11 +175,12 @@ function setupPostRoutes(app) {
   app.put('/api/posts/:id', requireAuth, (req, res) => {
     const post = q1('SELECT * FROM posts WHERE id = ?', [req.params.id]);
     if (!post) return fail(res, '文章不存在', 404);
-    if (post.user_id !== req.user.id && req.user.role !== 'admin') return fail(res, '无权编辑此文章', 403);
+    // 只有文章作者可以编辑
+    if (post.user_id !== req.user.id) return fail(res, '无权编辑此文章', 403);
     const { title, summary, content, tags, cover } = req.body;
 
-    // 非管理员修改已发布/已拒绝/被封禁文章 → pending 机制（检查敏感词）
-    if (req.user.role !== 'admin' && (post.status === 'published' || post.status === 'rejected' || post.status === 'banned')) {
+    // 作者修改已发布/已拒绝/被封禁文章 → pending 机制（检查敏感词）
+    if (post.status === 'published' || post.status === 'rejected' || post.status === 'banned') {
       const newTitle = title !== undefined ? title.trim() : post.title;
       const newSummary = summary !== undefined ? (summary || '').trim() : post.summary;
       const newContent = content || post.content;
@@ -215,9 +222,15 @@ function setupPostRoutes(app) {
         } else {
           run('UPDATE posts SET pending_title=?, pending_summary=?, pending_content=?, pending_cover=?, pending_tags=?, status=?, updated_at=? WHERE id=?',
             [newTitle, newSummary, newContent, newCover, newTags, 'pending', now(), req.params.id]);
+          // 轮换指派：新审核周期，重新分配管理员
+          const admins = qa('SELECT id FROM users WHERE role IN ("admin","super_admin") ORDER BY last_assigned_at ASC NULLS FIRST LIMIT 1');
+          if (admins.length > 0) {
+            const assignedAdmin = admins[0].id;
+            run('UPDATE posts SET assigned_to=?, assigned_at=? WHERE id=?', [assignedAdmin, now(), req.params.id]);
+            run('UPDATE users SET last_assigned_at=? WHERE id=?', [now(), assignedAdmin]);
+            notify(assignedAdmin, req.user.id, 'review', req.params.id);
+          }
         }
-        const admins = qa('SELECT id FROM users WHERE role="admin"');
-        admins.forEach(a => notify(a.id, req.user.id, 'review', req.params.id));
         logAudit(req.user.id, 'edit_post', req.params.id, newTitle);
         saveDB();
         const msg = post.status === 'banned' ? '修改已保存，等待管理员审核后解封' : '修改含敏感内容，已提交审核';
@@ -225,7 +238,7 @@ function setupPostRoutes(app) {
       }
     }
 
-    // 管理员或修改草稿/pending文章 → 直接覆盖
+    // 作者修改草稿/pending文章 → 直接覆盖（无需审核）
     if (title !== undefined) run('UPDATE posts SET title=?, summary=?, content=?, updated_at=?, cover=COALESCE(?,cover) WHERE id=?',
       [title.trim(), summary !== undefined ? (summary || '').trim() : post.summary, content || post.content, now(), cover || null, req.params.id]);
     if (tags) {
@@ -236,10 +249,6 @@ function setupPostRoutes(app) {
         run('INSERT OR IGNORE INTO post_tags VALUES (?,?)', [req.params.id, existing.id]);
       }
     }
-    // 如果是管理员修改他人文章，通知作者
-    if (req.user.role === 'admin' && post.user_id !== req.user.id) {
-      notify(post.user_id, req.user.id, 'admin_edit', req.params.id);
-    }
     logAudit(req.user.id, 'edit_post', req.params.id, title || '');
     saveDB();
     ok(res, { message: '文章更新成功', data: { id: req.params.id, status: post.status } });
@@ -249,7 +258,7 @@ function setupPostRoutes(app) {
   app.delete('/api/posts/:id', requireAuth, (req, res) => {
     const post = q1('SELECT * FROM posts WHERE id = ?', [req.params.id]);
     if (!post) return fail(res, '文章不存在', 404);
-    if (post.user_id !== req.user.id && req.user.role !== 'admin') return fail(res, '无权删除此文章', 403);
+    if (post.user_id !== req.user.id && req.user.role !== 'admin' && req.user.role !== 'super_admin') return fail(res, '无权删除此文章', 403);
     run('DELETE FROM comments WHERE post_id = ?', [req.params.id]);
     run('DELETE FROM likes WHERE post_id = ?', [req.params.id]);
     run('DELETE FROM favorites WHERE post_id = ?', [req.params.id]);

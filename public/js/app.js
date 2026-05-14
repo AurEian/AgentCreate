@@ -7,12 +7,27 @@ let postCache = {};
 
 function tok() { return sessionStorage.getItem('token') || ''; }
 function authH() { return { 'Authorization': tok() }; }
-function jsonH() { return { 'Authorization': tok(), 'Content-Type': 'application/json' }; }
+function jsonH() { return { 'Authorization': tok(), 'Content-Type': 'application/json; charset=utf-8' }; }
+
+// ============ 表格单元格展开/收起 ============
+const _cellFullText = {}; // { id: fullText }
+function toggleCell(event, id) {
+  const el = event.currentTarget;
+  const fullText = _cellFullText[id];
+  const LONG = 30;
+  if (el.dataset.expanded === '1') {
+    el.innerHTML = escHtml(fullText.slice(0, LONG)) + `… <span style="font-size:11px;color:var(--t2)">[展开]</span>`;
+    el.dataset.expanded = '0';
+  } else {
+    el.innerHTML = escHtml(fullText) + ` <span style="font-size:11px;color:var(--t2)">[收起]</span>`;
+    el.dataset.expanded = '1';
+  }
+}
 
 // ── Auth ──
 async function register(email, password, name) {
   const res = await fetch(`${API_BASE}/register`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    method: 'POST', headers: { 'Content-Type': 'application/json; charset=utf-8' },
     body: JSON.stringify({ email, password, name })
   });
   return res.json();
@@ -20,7 +35,7 @@ async function register(email, password, name) {
 
 async function login(email, password) {
   const res = await fetch(`${API_BASE}/login`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    method: 'POST', headers: { 'Content-Type': 'application/json; charset=utf-8' },
     body: JSON.stringify({ email, password })
   });
   return res.json();
@@ -40,6 +55,7 @@ async function getMe() {
 function logout() {
   sessionStorage.removeItem('token');
   currentUser = null;
+  window._currentUser = null;
   location.hash = '#/login';
   setTimeout(() => location.reload(), 100);
 }
@@ -399,7 +415,7 @@ async function router() {
     } else if (route === 'drafts') {
       renderDrafts(); nav('drafts');
     } else if (route === 'admin') {
-      if (currentUser.role !== 'admin') { showToast('无权限', 'err'); location.hash = '#/'; return; }
+      if (currentUser.role !== 'admin' && currentUser.role !== 'super_admin') { showToast('无权限', 'err'); location.hash = '#/'; return; }
       renderAdmin(); nav('admin');
     } else {
       renderHome(1); nav('home');
@@ -418,6 +434,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.documentElement.setAttribute('data-theme', theme);
 
   currentUser = await getMe();
+  window._currentUser = currentUser; // 暴露给 pages3.js 等模块使用
 
   if (currentUser) {
     document.getElementById('auth-box').style.display = 'none';
@@ -433,7 +450,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     } else {
       document.getElementById('avatar-text').textContent = currentUser.name.charAt(0).toUpperCase();
     }
-    if (currentUser.role === 'admin') {
+    if (currentUser.role === 'admin' || currentUser.role === 'super_admin') {
       const el = document.getElementById('admin-nav');
       if (el) el.style.display = 'flex';
     }
@@ -505,7 +522,13 @@ window.API = {
   deleteSensitiveWord: async (word) => { const r = await fetch(`${API_BASE}/admin/sensitive-words/${word}`, { method: 'DELETE', headers: authH() }); return r.json(); },
   getPostViolation: async (id) => { const r = await fetch(`${API_BASE}/admin/posts/${id}/violation`, { headers: authH() }); const d = await r.json(); return d.data || null; },
   getPendingProfiles: async () => { const r = await fetch(`${API_BASE}/admin/pending-profiles`, { headers: authH() }); const d = await r.json(); return d.data || []; },
-  reviewProfile: async (userId, action) => { const r = await fetch(`${API_BASE}/admin/users/${userId}/profile-review`, { method: 'POST', headers: jsonH(), body: JSON.stringify({ action }) }); return r.json(); }
+  reviewProfile: async (userId, action) => { const r = await fetch(`${API_BASE}/admin/users/${userId}/profile-review`, { method: 'POST', headers: jsonH(), body: JSON.stringify({ action }) }); return r.json(); },
+  // 申诉 API
+  submitAppeal: async (reason) => { const r = await fetch(`${API_BASE}/user/appeal`, { method: 'POST', headers: jsonH(), body: JSON.stringify({ reason }) }); return r.json(); },
+  getMyAppeal: async () => { const r = await fetch(`${API_BASE}/user/appeal`, { headers: authH() }); return r.json(); },
+  getAppeals: async (status = '') => { const r = await fetch(`${API_BASE}/admin/appeals${status ? '?status='+status : ''}`, { headers: authH() }); const d = await r.json(); return d.data || []; },
+  approveAppeal: async (id) => { const r = await fetch(`${API_BASE}/admin/appeals/${id}/approve`, { method: 'POST', headers: authH() }); return r.json(); },
+  rejectAppeal: async (id, note = '') => { const r = await fetch(`${API_BASE}/admin/appeals/${id}/reject`, { method: 'POST', headers: jsonH(), body: JSON.stringify({ note }) }); return r.json(); }
 };
 // ============ UI: Confirm Dialog ============
 function showConfirm({ title, message, confirmText = '确定', cancelText = '取消', type = 'warn', dangerouslyUseHTML = false }) {

@@ -292,14 +292,14 @@ async function renderPost(id) {
   
   try {
     const post = await API.getPost(postId);
-    
+
     // 检查是否获取成功
     if (!post || post.success === false || !post.id) {
       console.error('[DEBUG] 获取文章失败:', postId, post);
       document.getElementById('post-content').innerHTML = `<div style="padding:40px;text-align:center;color:var(--t3)">文章不存在或已被删除<br><small>ID: ${escHtml(postId)}</small></div>`;
       return;
     }
-    
+
     // Normalize
     const authorId = post.user_id || post.authorId || post.author_id || '';
     const authorName = post.author_name || post.author || '未知';
@@ -329,7 +329,7 @@ async function renderPost(id) {
           <span>你提交了修改版本，正在等待管理员审核。审核前此页面展示的是旧版本内容。</span>
         </div>
       ` : ''}
-      ${post.pending_title && currentUser && currentUser.role === 'admin' && authorId !== currentUser.id ? `
+      ${post.pending_title && currentUser && (currentUser.role === 'admin' || currentUser.role === 'super_admin') && authorId !== currentUser.id ? `
         <div style="background:linear-gradient(135deg,rgba(96,165,250,.08),rgba(96,165,250,.04));border:1px solid rgba(96,165,250,.3);border-radius:16px;padding:16px 20px;margin-bottom:20px">
           <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
@@ -424,23 +424,23 @@ async function renderPost(id) {
             删除
           </button>
         ` : ''}
-        ${currentUser && currentUser.role === 'admin' && post.status === 'pending' && authorId !== currentUser.id ? `
+        ${currentUser && (currentUser.role === 'admin' || currentUser.role === 'super_admin') && post.status === 'pending' && authorId !== currentUser.id ? `
           <button class="action-btn" style="color:var(--ok);border-color:rgba(34,197,94,.3)" onclick="reviewPostInDetail('${id}','approve',this)">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
             通过审核
           </button>
-          <button class="action-btn" style="color:var(--err);border-color:rgba(239,68,68,.3)" onclick="reviewPostInDetail('${id}','reject',this)">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-            拒绝
-          </button>
-        ` : ''}
-        ${currentUser && currentUser.role === 'admin' && post.status !== 'banned' && authorId !== currentUser.id ? `
           <button class="action-btn" style="color:#ef4444;border-color:rgba(239,68,68,.3)" onclick="banPost('${id}')">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
             封禁博客
           </button>
         ` : ''}
-        ${currentUser && currentUser.role === 'admin' && post.status === 'banned' ? `
+        ${currentUser && (currentUser.role === 'admin' || currentUser.role === 'super_admin') && post.status !== 'banned' && post.status !== 'pending' && authorId !== currentUser.id ? `
+          <button class="action-btn" style="color:#ef4444;border-color:rgba(239,68,68,.3)" onclick="banPost('${id}')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+            封禁博客
+          </button>
+        ` : ''}
+        ${currentUser && (currentUser.role === 'admin' || currentUser.role === 'super_admin') && post.status === 'banned' ? `
           <button class="action-btn" style="color:var(--ok);border-color:rgba(34,197,94,.3)" onclick="unbanPost('${id}')">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
             解封博客
@@ -502,7 +502,7 @@ function renderCommentTree(comments, containerId, postId, parentId = null, depth
           <div class="comment-actions">
             <button class="comment-action" onclick="showReplyForm('${comment.id}', '${authorName}')">回复</button>
             ${comment.user_id === currentUser.id ? `<button class="comment-action" style="color:var(--err)" onclick="deleteComment('${comment.id}')">删除</button>` : ''}
-            ${currentUser && currentUser.role === 'admin' && comment.user_id !== currentUser.id ? `<button class="comment-action" style="color:#ef4444" onclick="adminDeleteComment('${comment.id}', '${authorName}')">删除</button>` : ''}
+            ${currentUser && (currentUser.role === 'admin' || currentUser.role === 'super_admin') && comment.user_id !== currentUser.id ? `<button class="comment-action" style="color:#ef4444" onclick="adminDeleteComment('${comment.id}', '${authorName}')">删除</button>` : ''}
           </div>
           ${comments.some(c => c.parent_id === comment.id) ? `
             <div class="comment-replies">

@@ -3,7 +3,7 @@
  */
 const { randomUUID } = require('crypto');
 const { q1, qa, run, saveDB, ok, fail, logAudit, notify, getBan, now } = require('../db');
-const { requireAuth, requireAdmin } = require('../middleware/auth');
+const { requireAuth, requireAdmin, requireSuperAdmin } = require('../middleware/auth');
 
 function setupAdminRoutes(app) {
   // ===================== 统计仪表盘 =====================
@@ -68,24 +68,73 @@ function setupAdminRoutes(app) {
   app.post('/api/admin/users/:id/ban', requireAuth, requireAdmin, (req, res) => {
     const user = q1('SELECT * FROM users WHERE id = ?', [req.params.id]);
     if (!user) return fail(res, '用户不存在', 404);
-    if (user.role === 'admin') return fail(res, '无法封禁管理员');
-    const { reason, duration = 30 } = req.body;
+    if (user.role === 'admin' || user.role === 'super_admin') return fail(res, '无法封禁管理员');
+    const { reason, until: untilParam } = req.body;
     if (!reason) return fail(res, '请填写封禁原因');
-    const futureDate = new Date(Date.now() + parseInt(duration) * 86400000);
-    const pad = n => String(n).padStart(2, '0');
-    const until = `${futureDate.getFullYear()}-${pad(futureDate.getMonth()+1)}-${pad(futureDate.getDate())} ${pad(futureDate.getHours())}:${pad(futureDate.getMinutes())}:${pad(futureDate.getSeconds())}`;
+    if (!untilParam) return fail(res, '请选择封禁截止日期');
+    // 规范化截止时间格式
+    const until = untilParam.length === 10 ? `${untilParam} 23:59:59` : untilParam;
     run('INSERT OR REPLACE INTO bans (user_id, reason, banned_until) VALUES (?,?,?)', [user.id, reason, until]);
-    logAudit(req.user.id, 'ban_user', user.id, `${user.name}: ${reason} (${duration}天)`);
+    logAudit(req.user.id, 'ban_user', user.id, `${user.name}: ${reason}`);
+    // 发通知给被封禁用户
+    notify(user.id, req.user.id, 'user_ban', '', `封禁原因：${reason}，解封时间：${until.slice(0, 10)}`);
+    // 删除该用户的待处理申诉（重新封禁时清空旧申诉）
+    run('DELETE FROM appeals WHERE user_id=? AND status=?', [user.id, 'pending']);
     saveDB();
-    ok(res, { message: `已封禁用户 ${user.name}，解封时间：${until}` });
+    ok(res, { message: `已封禁用户 ${user.name}，解封时间：${until.slice(0, 10)}` });
   });
 
   // 解封用户
   app.post('/api/admin/users/:id/unban', requireAuth, requireAdmin, (req, res) => {
+    const user = q1('SELECT * FROM users WHERE id = ?', [req.params.id]);
     run('DELETE FROM bans WHERE user_id = ?', [req.params.id]);
     logAudit(req.user.id, 'unban_user', req.params.id, '');
+    // 发通知给被解封用户
+    if (user) notify(user.id, req.user.id, 'user_unban', '', '');
     saveDB();
     ok(res, { message: '已解封' });
+  });
+
+  // ===================== 申诉管理 =====================
+
+  // 管理员查看所有申诉
+  app.get('/api/admin/appeals', requireAuth, requireAdmin, (req, res) => {
+    const { status = '' } = req.query;
+    const where = status ? 'WHERE a.status=?' : '';
+    const params = status ? [status] : [];
+    const rows = qa(`SELECT a.*, u.name as userName, u.email as userEmail,
+      b.reason as banReason, b.banned_until as bannedUntil
+      FROM appeals a
+      LEFT JOIN users u ON a.user_id = u.id
+      LEFT JOIN bans b ON a.user_id = b.user_id
+      ${where} ORDER BY a.created_at DESC`, params);
+    ok(res, { data: rows });
+  });
+
+  // 管理员批准申诉 → 自动解封
+  app.post('/api/admin/appeals/:id/approve', requireAuth, requireAdmin, (req, res) => {
+    const appeal = q1('SELECT * FROM appeals WHERE id=?', [req.params.id]);
+    if (!appeal) return fail(res, '申诉不存在', 404);
+    if (appeal.status !== 'pending') return fail(res, '申诉已处理');
+    run('UPDATE appeals SET status=?, resolved_at=? WHERE id=?', ['approved', now(), req.params.id]);
+    run('DELETE FROM bans WHERE user_id=?', [appeal.user_id]);
+    logAudit(req.user.id, 'appeal_approve', appeal.user_id, '');
+    notify(appeal.user_id, req.user.id, 'appeal_approved', '', '你的解封申诉已通过，账号已恢复正常');
+    saveDB();
+    ok(res, { message: '申诉已批准，用户已解封' });
+  });
+
+  // 管理员拒绝申诉
+  app.post('/api/admin/appeals/:id/reject', requireAuth, requireAdmin, (req, res) => {
+    const appeal = q1('SELECT * FROM appeals WHERE id=?', [req.params.id]);
+    if (!appeal) return fail(res, '申诉不存在', 404);
+    if (appeal.status !== 'pending') return fail(res, '申诉已处理');
+    const { note = '' } = req.body;
+    run('UPDATE appeals SET status=?, admin_note=?, resolved_at=? WHERE id=?', ['rejected', note, now(), req.params.id]);
+    logAudit(req.user.id, 'appeal_reject', appeal.user_id, note);
+    notify(appeal.user_id, req.user.id, 'appeal_rejected', '', note ? `申诉被拒绝，原因：${note}` : '你的解封申诉已被拒绝');
+    saveDB();
+    ok(res, { message: '申诉已拒绝' });
   });
 
   // ===================== 敏感词管理 =====================
@@ -111,21 +160,87 @@ function setupAdminRoutes(app) {
     ok(res, { message: '删除成功' });
   });
 
+  // ===================== 工具函数 =====================
+  // 检查管理员是否有权限操作某篇文章（超管可操作全部，普通管理员只能操作被指派的文章）
+  function canOperatePost(user, post) {
+    if (user.role === 'super_admin') return { ok: true };
+    // assigned_to 可能是 NULL 或空字符串，都视为未指派
+    if (post.assigned_to === user.id || !post.assigned_to) return { ok: true };
+    return { ok: false, msg: `该文章已被指派给 ${post.assigned_to_name || '其他管理员'} 负责，你无权操作` };
+  }
+
   // ===================== 文章管理 =====================
   app.get('/api/admin/posts', requireAuth, requireAdmin, (req, res) => {
+    // 自动释放超过 10 分钟未完成的认领
+    run(`UPDATE posts SET reviewer_id='', reviewer_claimed_at='' WHERE reviewer_id != '' AND reviewer_claimed_at != '' AND (julianday('now','localtime') - julianday(reviewer_claimed_at)) * 1440 > 10`);
     const rows = qa(`SELECT p.id, p.title, p.created_at, p.updated_at, p.status, p.likes, p.views, u.name as author, p.user_id as authorId,
-      CASE WHEN p.pending_title != '' THEN 1 ELSE 0 END as has_pending_edit
-      FROM posts p JOIN users u ON p.user_id=u.id ORDER BY p.created_at DESC`);
+      CASE WHEN p.pending_title != '' THEN 1 ELSE 0 END as has_pending_edit,
+      p.reviewer_id, p.reviewer_claimed_at, p.reviewed_by,
+      p.assigned_to, p.assigned_at,
+      ru.name as reviewer_name, rbu.name as reviewed_by_name,
+      au.name as assigned_to_name
+      FROM posts p
+      JOIN users u ON p.user_id=u.id
+      LEFT JOIN users ru ON p.reviewer_id=ru.id
+      LEFT JOIN users rbu ON p.reviewed_by=rbu.id
+      LEFT JOIN users au ON p.assigned_to=au.id
+      ORDER BY p.created_at DESC`);
     ok(res, { data: rows.map(r => {
       const ts = qa('SELECT t.name FROM tags t JOIN post_tags pt ON pt.tag_id=t.id WHERE pt.post_id=?', [r.id]);
       return { ...r, tags: ts.map(t => t.name) };
     }) });
   });
 
-  // 审核文章（approve/reject）
-  app.put('/api/admin/posts/:id/review', requireAuth, requireAdmin, (req, res) => {
+  // 认领文章审核（标记"我正在审"）
+  app.post('/api/admin/posts/:id/claim', requireAuth, requireAdmin, (req, res) => {
+    const post = q1('SELECT p.*, au.name as assigned_to_name FROM posts p LEFT JOIN users au ON p.assigned_to=au.id WHERE p.id = ?', [req.params.id]);
+    if (!post) return fail(res, '文章不存在', 404);
+    // 权限检查
+    const check = canOperatePost(req.user, post);
+    if (!check.ok) return fail(res, check.msg, 403);
+    // 已被别人认领且未超时（10分钟内）
+    if (post.reviewer_id && post.reviewer_id !== req.user.id) {
+      const claimed = post.reviewer_claimed_at;
+      if (claimed) {
+        const diffMin = (new Date() - new Date(claimed.replace(' ', 'T'))) / 60000;
+        if (diffMin < 10) {
+          const reviewer = q1('SELECT name FROM users WHERE id=?', [post.reviewer_id]);
+          return fail(res, `该文章已被 ${reviewer?.name || '其他管理员'} 认领，请等待或强制抢占`, 409);
+        }
+      }
+    }
+    run(`UPDATE posts SET reviewer_id=?, reviewer_claimed_at=? WHERE id=?`, [req.user.id, now(), req.params.id]);
+    saveDB();
+    ok(res, { message: '认领成功' });
+  });
+
+  // 强制抢占认领（仅超管可用）
+  app.post('/api/admin/posts/:id/claim-force', requireAuth, requireAdmin, (req, res) => {
+    if (req.user.role !== 'super_admin') return fail(res, '只有超管可以强制抢占', 403);
     const post = q1('SELECT * FROM posts WHERE id = ?', [req.params.id]);
     if (!post) return fail(res, '文章不存在', 404);
+    run(`UPDATE posts SET reviewer_id=?, reviewer_claimed_at=? WHERE id=?`, [req.user.id, now(), req.params.id]);
+    saveDB();
+    ok(res, { message: '已抢占认领' });
+  });
+
+  // 释放认领（离开时调用）
+  app.post('/api/admin/posts/:id/unclaim', requireAuth, requireAdmin, (req, res) => {
+    const post = q1('SELECT * FROM posts WHERE id = ?', [req.params.id]);
+    if (!post) return fail(res, '文章不存在', 404);
+    if (post.reviewer_id !== req.user.id) return fail(res, '你未认领此文章', 403);
+    run(`UPDATE posts SET reviewer_id='', reviewer_claimed_at='' WHERE id=?`, [req.params.id]);
+    saveDB();
+    ok(res, { message: '已释放认领' });
+  });
+
+  // 审核文章（approve/reject）
+  app.put('/api/admin/posts/:id/review', requireAuth, requireAdmin, (req, res) => {
+    const post = q1('SELECT p.*, au.name as assigned_to_name FROM posts p LEFT JOIN users au ON p.assigned_to=au.id WHERE p.id = ?', [req.params.id]);
+    if (!post) return fail(res, '文章不存在', 404);
+    // 权限检查
+    const check = canOperatePost(req.user, post);
+    if (!check.ok) return fail(res, check.msg, 403);
     const { action, reason } = req.body;
     if (action === 'approve') {
       // 确定最终发布的标题和内容
@@ -161,6 +276,8 @@ function setupAdminRoutes(app) {
         const verify = q1('SELECT id, title, status FROM posts WHERE id=?', [req.params.id]);
         console.log('[DEBUG] 新文章审核后验证:', verify);
       }
+      // 审核完成：记录审核人，清空认领和指派状态
+      run(`UPDATE posts SET reviewed_by=?, reviewer_id='', reviewer_claimed_at='', assigned_to='', assigned_at='' WHERE id=?`, [req.user.id, req.params.id]);
       logAudit(req.user.id, 'approve_post', req.params.id, post.pending_title || post.title);
       notify(post.user_id, req.user.id, 'approve', req.params.id);
       saveDB();
@@ -169,6 +286,8 @@ function setupAdminRoutes(app) {
       if (!reason || !reason.trim()) return fail(res, '请填写拒绝原因');
       // 拒绝：文章status设为rejected，不再显示在首页，保存拒绝原因
       run('UPDATE posts SET status=? , reject_reason=? , pending_title="", pending_summary="", pending_content="", pending_cover="", pending_tags="" WHERE id=?', ['rejected', reason.trim(), req.params.id]);
+      // 记录审核人，清空认领和指派状态
+      run(`UPDATE posts SET reviewed_by=?, reviewer_id='', reviewer_claimed_at='', assigned_to='', assigned_at='' WHERE id=?`, [req.user.id, req.params.id]);
       logAudit(req.user.id, 'reject_post', req.params.id, `${post.title} | 原因: ${reason.trim()}`);
       notify(post.user_id, req.user.id, 'reject', req.params.id, `原因：${reason.trim()}`);
       saveDB();
@@ -180,14 +299,17 @@ function setupAdminRoutes(app) {
 
   // 封禁博客（管理员可直接封禁并给出理由）
   app.post('/api/admin/posts/:id/ban', requireAuth, requireAdmin, (req, res) => {
-    const post = q1('SELECT * FROM posts WHERE id = ?', [req.params.id]);
+    const post = q1('SELECT p.*, au.name as assigned_to_name FROM posts p LEFT JOIN users au ON p.assigned_to=au.id WHERE p.id = ?', [req.params.id]);
     if (!post) return fail(res, '文章不存在', 404);
+    // 权限检查
+    const check = canOperatePost(req.user, post);
+    if (!check.ok) return fail(res, check.msg, 403);
     const { reason } = req.body;
     if (!reason || !reason.trim()) return fail(res, '请填写封禁理由');
     
-    // 将文章状态设为 banned，并记录封禁理由
-    const ok1 = run('UPDATE posts SET status=? , ban_reason=? , updated_at=? WHERE id=?', 
-      ['banned', reason.trim(), now(), req.params.id]);
+    // 将文章状态设为 banned，并记录封禁理由；同时记录审核人、清空认领和指派状态
+    const ok1 = run('UPDATE posts SET status=? , ban_reason=? , updated_at=?, reviewed_by=?, reviewer_id="", reviewer_claimed_at="", assigned_to="", assigned_at="" WHERE id=?', 
+      ['banned', reason.trim(), now(), req.user.id, req.params.id]);
     if (!ok1) return fail(res, '封禁失败：数据库更新错误', 500);
     
     logAudit(req.user.id, 'ban_post', req.params.id, `${post.title} | 理由: ${reason.trim()}`);
@@ -202,9 +324,9 @@ function setupAdminRoutes(app) {
     if (!post) return fail(res, '文章不存在', 404);
     if (post.status !== 'banned') return fail(res, '该文章未被封禁', 400);
     
-    // 将文章状态恢复为 published，清空封禁理由
-    const ok1 = run('UPDATE posts SET status=? , ban_reason=? , updated_at=? WHERE id=?', 
-      ['published', '', now(), req.params.id]);
+    // 将文章状态恢复为 published，清空封禁理由；记录解封人
+    const ok1 = run('UPDATE posts SET status=? , ban_reason=? , updated_at=?, reviewed_by=? WHERE id=?', 
+      ['published', '', now(), req.user.id, req.params.id]);
     if (!ok1) return fail(res, '解封失败：数据库更新错误', 500);
     
     logAudit(req.user.id, 'unban_post', req.params.id, post.title);
@@ -345,8 +467,8 @@ function setupAdminRoutes(app) {
     ok(res, { message: '评论已删除' });
   });
 
-  // ===================== 审计日志 =====================
-  app.get('/api/admin/audit-log', requireAuth, requireAdmin, (req, res) => {
+  // ===================== 审计日志（兼容旧路径，super_admin 专属） =====================
+  app.get('/api/admin/audit-log', requireAuth, requireSuperAdmin, (req, res) => {
     const { page = 1, limit = 20 } = req.query;
     const p = parseInt(page), l = parseInt(limit);
     const offset = (p - 1) * l;
@@ -383,6 +505,71 @@ function setupAdminRoutes(app) {
       fail(res, '无效操作');
     }
   });
+  // ===================== 超级管理员专属 =====================
+
+  // 获取所有管理员列表（含 super_admin）
+  app.get('/api/super/admins', requireAuth, requireSuperAdmin, (req, res) => {
+    const admins = qa(`SELECT u.id, u.name, u.email, u.role, u.created_at,
+      (SELECT COUNT(*) FROM audit_log WHERE user_id=u.id) as op_count,
+      (SELECT created_at FROM audit_log WHERE user_id=u.id ORDER BY created_at DESC LIMIT 1) as last_op
+      FROM users u WHERE u.role IN ('admin','super_admin') ORDER BY u.created_at ASC`);
+    ok(res, { data: admins });
+  });
+
+  // 设置用户为管理员
+  app.post('/api/super/admins/:id/grant', requireAuth, requireSuperAdmin, (req, res) => {
+    const user = q1('SELECT * FROM users WHERE id=?', [req.params.id]);
+    if (!user) return fail(res, '用户不存在', 404);
+    if (user.role === 'super_admin') return fail(res, '不能修改超级管理员');
+    if (user.role === 'admin') return fail(res, '该用户已是管理员');
+    run('UPDATE users SET role=? WHERE id=?', ['admin', req.params.id]);
+    logAudit(req.user.id, 'grant_admin', req.params.id, `${user.name} 被设为管理员`);
+    saveDB();
+    ok(res, { message: `已将 ${user.name} 设为管理员` });
+  });
+
+  // 取消用户的管理员权限
+  app.post('/api/super/admins/:id/revoke', requireAuth, requireSuperAdmin, (req, res) => {
+    const user = q1('SELECT * FROM users WHERE id=?', [req.params.id]);
+    if (!user) return fail(res, '用户不存在', 404);
+    if (user.role === 'super_admin') return fail(res, '不能撤销超级管理员');
+    if (user.role !== 'admin') return fail(res, '该用户不是管理员');
+    run('UPDATE users SET role=? WHERE id=?', ['user', req.params.id]);
+    logAudit(req.user.id, 'revoke_admin', req.params.id, `${user.name} 被取消管理员`);
+    saveDB();
+    ok(res, { message: `已取消 ${user.name} 的管理员权限` });
+  });
+
+  // 审计日志（超级管理员专属，可按操作人筛选）
+  app.get('/api/super/audit-log', requireAuth, requireSuperAdmin, (req, res) => {
+    const { page = 1, limit = 20, userId = '', role = '', keyword = '' } = req.query;
+    const p = parseInt(page), l = parseInt(limit);
+    const offset = (p - 1) * l;
+
+    let where = [];
+    let params = [];
+
+    if (userId) {
+      where.push('a.user_id=?');
+      params.push(userId);
+    }
+    if (role) {
+      where.push('u.role=?');
+      params.push(role);
+    }
+    if (keyword) {
+      where.push('u.name LIKE ?');
+      params.push(`%${keyword}%`);
+    }
+
+    const whereClause = where.length > 0 ? `WHERE ${where.join(' AND ')}` : '';
+    const total = q1(`SELECT COUNT(*) as c FROM audit_log a LEFT JOIN users u ON a.user_id=u.id ${whereClause}`, params)?.c || 0;
+    const rows = qa(`SELECT a.*, u.name as userName, u.role as userRole
+      FROM audit_log a LEFT JOIN users u ON a.user_id=u.id
+      ${whereClause} ORDER BY a.created_at DESC LIMIT ${l} OFFSET ${offset}`, params);
+    ok(res, { data: rows, pagination: { page: p, limit: l, total } });
+  });
+
 }
 
 module.exports = setupAdminRoutes;

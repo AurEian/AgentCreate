@@ -348,20 +348,28 @@ async function renderAdmin() {
       <div class="tabs">
         <button class="tab active" onclick="switchAdminTab('posts', this)">文章管理</button>
         <button class="tab" onclick="switchAdminTab('users', this)">用户管理</button>
+        <button class="tab" onclick="switchAdminTab('appeals', this)">申诉管理</button>
         <button class="tab" onclick="switchAdminTab('profile-review', this)">资料审核</button>
         <button class="tab" onclick="switchAdminTab('comments', this)">评论管理</button>
         <button class="tab" onclick="switchAdminTab('announcements', this)">系统公告</button>
         <button class="tab" onclick="switchAdminTab('sensitive', this)">敏感词管理</button>
-        <button class="tab" onclick="switchAdminTab('logs', this)">操作日志</button>
+        ${currentUser && currentUser.role === 'super_admin' ? `<button class="tab tab-super" onclick="switchAdminTab('super', this)" style="background:linear-gradient(135deg,rgba(168,85,247,.2),rgba(99,102,241,.2));border-color:rgba(168,85,247,.4);color:#c084fc">👑 超级管理员</button>` : ''}
       </div>
       
       <div id="admin-tab-posts"></div>
       <div id="admin-tab-users" class="hidden"></div>
+      <div id="admin-tab-appeals" class="hidden">
+        <div style="padding:4px 0 16px;display:flex;align-items:center;justify-content:space-between">
+          <h3 style="font-size:15px;font-weight:600;color:var(--t1);margin:0">解封申诉列表</h3>
+          <button class="btn btn-ghost btn-sm" onclick="loadAdminAppeals()">刷新</button>
+        </div>
+        <div id="admin-appeals-list"><div class="skeleton skel-line"></div></div>
+      </div>
       <div id="admin-tab-profile-review" class="hidden"></div>
       <div id="admin-tab-comments" class="hidden"></div>
       <div id="admin-tab-announcements" class="hidden"></div>
       <div id="admin-tab-sensitive" class="hidden"></div>
-      <div id="admin-tab-logs" class="hidden"></div>
+      <div id="admin-tab-super" class="hidden"></div>
     </div>
   `;
   page.classList.add('active');
@@ -511,18 +519,19 @@ function switchAdminTab(tab, btn) {
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   btn.classList.add('active');
   
-  ['posts', 'users', 'profile-review', 'comments', 'announcements', 'sensitive', 'logs'].forEach(t => {
+  ['posts', 'users', 'appeals', 'profile-review', 'comments', 'announcements', 'sensitive', 'super'].forEach(t => {
     const el = document.getElementById(`admin-tab-${t}`);
     if (el) el.classList.toggle('hidden', t !== tab);
   });
   
   if (tab === 'posts') loadAdminPosts();
   else if (tab === 'users') loadAdminUsers();
+  else if (tab === 'appeals') loadAdminAppeals();
   else if (tab === 'profile-review') loadAdminProfileReview();
   else if (tab === 'comments') loadAdminComments();
   else if (tab === 'announcements') loadAdminAnnouncements();
   else if (tab === 'sensitive') loadAdminSensitive();
-  else if (tab === 'logs') loadAdminLogs();
+  else if (tab === 'super') loadSuperAdmin();
 }
 
 async function loadAdminPosts() {
@@ -553,26 +562,48 @@ async function loadAdminPosts() {
           <tbody>
             ${posts.map(p => {
               const authorName = p.author_name || p.author || '-';
-              const statusMap = { published: ['已发布', 'text-ok'], pending: ['待审核', 'text-warn'], rejected: ['已拒绝', 'text-err'], draft: ['草稿', 'text-muted'] };
+              const statusMap = { published: ['已发布', 'text-ok'], pending: ['待审核', 'text-warn'], rejected: ['已拒绝', 'text-err'], draft: ['草稿', 'text-muted'], banned: ['已封禁', 'text-err'] };
               const [statusText, statusClass] = statusMap[p.status] || [p.status, ''];
               const hasPending = p.has_pending_edit == 1;
+              const me = window._currentUser;
+              const isSuperAdmin = me && (me.role === 'super_admin');
+              const isAssignedToMe = me && (p.assigned_to === me.id);
+              const assignedToName = p.assigned_to_name || '';
+              const isAssigned = !!p.assigned_to;
+              const canOperate = isSuperAdmin || isAssignedToMe || !isAssigned;
+
+              const needsReview = p.status === 'pending' || (p.status === 'published' && hasPending);
+              const isClaimed = !!p.reviewer_id;
+              const isClaimedByMe = p.reviewer_id && me && p.reviewer_id === me.id;
+              const reviewerName = p.reviewer_name || '';
+              const reviewedByName = p.reviewed_by_name || '';
+
               return `
               <tr>
-                <td><a href="#/post/${p.id}" style="color:var(--accent)">${escHtml(p.title)}</a>${p.status === 'published' && hasPending ? ' <span style="font-size:11px;background:rgba(251,191,36,.15);color:#fbbf24;padding:1px 6px;border-radius:6px;margin-left:4px">修改待审</span>' : ''}</td>
+                <td>
+                  <a href="#/post/${p.id}" style="color:var(--accent)">${escHtml(p.title)}</a>
+                  ${p.status === 'published' && hasPending ? ' <span style="font-size:11px;background:rgba(251,191,36,.15);color:#fbbf24;padding:1px 6px;border-radius:6px;margin-left:4px">修改待审</span>' : ''}
+                  ${needsReview ? (isAssigned ? `<span style="font-size:11px;background:${isAssignedToMe ? 'rgba(34,197,94,.15)' : 'rgba(99,102,241,.15)'};color:${isAssignedToMe ? '#4ade80' : '#818cf8'};padding:1px 6px;border-radius:6px;margin-left:4px">${isAssignedToMe ? '📋 我负责' : `📋 ${escHtml(assignedToName)} 负责`}</span>` : `<span style="font-size:11px;background:rgba(251,191,36,.15);color:#fbbf24;padding:1px 6px;border-radius:6px;margin-left:4px">⚠️ 无人负责</span>`) : ''}
+                  ${needsReview && isClaimed ? `<span style="font-size:11px;background:${isClaimedByMe ? 'rgba(34,197,94,.15)' : 'rgba(96,165,250,.15)'};color:${isClaimedByMe ? '#4ade80' : '#60a5fa'};padding:1px 6px;border-radius:6px;margin-left:4px">${isClaimedByMe ? '👤 我在审' : `👤 ${escHtml(reviewerName)} 在审`}</span>` : ''}
+                  ${!needsReview && reviewedByName ? `<span style="font-size:11px;background:rgba(148,163,184,.12);color:var(--t3);padding:1px 6px;border-radius:6px;margin-left:4px">审核人: ${escHtml(reviewedByName)}</span>` : ''}
+                </td>
                 <td>${escHtml(authorName)}</td>
                 <td><span class="${statusClass}">${statusText}</span></td>
                 <td>${p.views || 0}</td>
                 <td>${UI.formatDate(p.created_at)}</td>
                 <td>
                   <div class="tbl-actions">
-                    ${p.status === 'pending' || (p.status === 'published' && hasPending) ? `
+                    ${needsReview && canOperate ? `
                       <button class="btn btn-xs" style="background:var(--ok);color:#fff" onclick="reviewPost('${p.id}','approve')">通过</button>
-                      <button class="btn btn-danger btn-xs" onclick="reviewPost('${p.id}','reject')">拒绝</button>
+                      <button class="btn btn-danger btn-xs" onclick="banPost('${p.id}')">封禁</button>
+                    ` : needsReview && !canOperate ? `<span style="font-size:11px;color:var(--t3)">${assignedToName} 负责</span>` : ''}
+                    ${p.status === 'published' && !hasPending && canOperate ? `<button class="btn btn-danger btn-xs" onclick="banPost('${p.id}')">封禁</button>` : ''}
+                    ${p.status === 'rejected' && canOperate ? `
+                      <button class="btn btn-xs" style="background:var(--ok);color:#fff" onclick="reviewPost('${p.id}','approve')">恢复</button>
+                      <button class="btn btn-danger btn-xs" onclick="banPost('${p.id}')">封禁</button>
                     ` : ''}
-                    ${p.status !== 'pending' && !hasPending ? `
-                      <button class="btn btn-ghost btn-xs" onclick="location.hash='#/write?edit=${p.id}'">编辑</button>
-                    ` : ''}
-                    <button class="btn btn-danger btn-xs" onclick="adminDeletePost('${p.id}')">删除</button>
+                    ${p.status === 'banned' && canOperate ? `<button class="btn btn-xs" style="background:rgba(34,197,94,.15);color:#4ade80;border:1px solid rgba(34,197,94,.3)" onclick="unbanPost('${p.id}')">解封</button>` : ''}
+                    ${isSuperAdmin ? `<button class="btn btn-danger btn-xs" onclick="adminDeletePost('${p.id}')">删除</button>` : ''}
                   </div>
                 </td>
               </tr>`;
@@ -598,6 +629,10 @@ async function adminDeletePost(id) {
 }
 
 async function reviewPost(id, action) {
+  // 先认领，认领失败（被别人占用）时提示并询问是否抢占
+  const claimOk = await claimPost(id);
+  if (!claimOk) return;
+
   // 拒绝时直接弹出输入原因框
   if (action === 'reject') {
     const reason = await UI.showPrompt({
@@ -697,6 +732,106 @@ async function reviewPost(id, action) {
   }
 }
 
+async function banPost(id) {
+  // 先认领
+  const claimOk = await claimPost(id);
+  if (!claimOk) return;
+
+  const reason = await UI.showPrompt({
+    title: '封禁文章',
+    message: '请输入封禁原因，作者将收到通知',
+    placeholder: '请说明封禁理由...',
+    confirmText: '确认封禁',
+    type: 'warn'
+  });
+  if (!reason || !reason.trim()) return;
+  try {
+    const res = await fetch(`${API_BASE}/admin/posts/${id}/ban`, {
+      method: 'POST', headers: jsonH(),
+      body: JSON.stringify({ reason: reason.trim() })
+    });
+    const data = await res.json();
+    if (data.success) {
+      UI.showToast(data.message, 'ok');
+      loadAdminPosts();
+    } else {
+      UI.showToast(data.message || '操作失败', 'err');
+    }
+  } catch {
+    UI.showToast('操作失败', 'err');
+  }
+}
+
+async function unbanPost(id) {
+  try {
+    const res = await fetch(`${API_BASE}/admin/posts/${id}/unban`, {
+      method: 'POST', headers: jsonH()
+    });
+    const data = await res.json();
+    if (data.success) {
+      UI.showToast(data.message, 'ok');
+      loadAdminPosts();
+    } else {
+      UI.showToast(data.message || '操作失败', 'err');
+    }
+  } catch {
+    UI.showToast('操作失败', 'err');
+  }
+}
+
+/**
+ * 认领文章审核。
+ * - 认领成功 → 返回 true
+ * - 被他人占用 → 弹窗询问是否抢占；抢占成功返回 true，否则返回 false
+ * - 自己已认领 → 直接返回 true（刷新认领时间）
+ */
+async function claimPost(id) {
+  try {
+    const res = await fetch(`${API_BASE}/admin/posts/${id}/claim`, {
+      method: 'POST', headers: jsonH()
+    });
+    const data = await res.json();
+    if (data.success) {
+      loadAdminPosts(); // 刷新列表让其他管理员看到
+      return true;
+    }
+    // 403 = 无权操作（不是你的指派）
+    if (res.status === 403) {
+      UI.showToast(data.message || '你没有权限操作此文章', 'err');
+      return false;
+    }
+    // 409 = 被他人认领
+    if (res.status === 409 || (data.message && data.message.includes('认领'))) {
+      const me = window._currentUser;
+      const isSuperAdmin = me && (me.role === 'super_admin');
+      if (!isSuperAdmin) {
+        UI.showToast(data.message || '认领失败', 'err');
+        return false;
+      }
+      const force = await UI.showConfirm({
+        title: '⚠️ 有人正在审核',
+        message: data.message + '<br><br>是否强制抢占此文章的审核？',
+        confirmText: '强制抢占',
+        type: 'warn',
+        dangerouslyUseHTML: true
+      });
+      if (!force) return false;
+      const res2 = await fetch(`${API_BASE}/admin/posts/${id}/claim-force`, {
+        method: 'POST', headers: jsonH()
+      });
+      const data2 = await res2.json();
+      if (data2.success) { loadAdminPosts(); return true; }
+      UI.showToast(data2.message || '抢占失败', 'err');
+      return false;
+    }
+    UI.showToast(data.message || '认领失败', 'err');
+    return false;
+  } catch {
+    UI.showToast('网络错误', 'err');
+    return false;
+  }
+}
+
 async function loadAdminUsers() {
   const container = document.getElementById('admin-tab-users');
   container.innerHTML = '<div class="skeleton skel-line"></div>';
@@ -722,19 +857,44 @@ async function loadAdminUsers() {
             </tr>
           </thead>
           <tbody>
-            ${users.map(u => `
+            ${users.map(u => {
+              const roleLabel = u.role === 'super_admin'
+                ? '<span style="color:#c084fc;font-weight:600">👑 超管</span>'
+                : u.role === 'admin'
+                  ? '<span class="badge-admin">管理员</span>'
+                  : '用户';
+              const banBadge = u.ban
+                ? `<span style="font-size:11px;background:rgba(239,68,68,.18);color:#f87171;border-radius:6px;padding:2px 7px;margin-left:6px" title="解封时间：${u.ban.banned_until.slice(0,10)}">🔒 封禁中</span>`
+                : '';
+              const isSuperViewing = currentUser && currentUser.role === 'super_admin';
+              let actions = '';
+              if (u.id === currentUser.id) {
+                actions = '<span style="color:var(--t3);font-size:12px">（自己）</span>';
+              } else if (u.role === 'super_admin') {
+                actions = '<span style="color:var(--t3);font-size:12px">超管</span>';
+              } else {
+                if (u.ban) {
+                  actions = `<button class="btn btn-xs" style="background:rgba(34,197,94,.15);color:#4ade80;border:1px solid rgba(34,197,94,.3)" onclick="adminUnbanUser('${u.id}','${escHtml(u.name)}')">解封</button>`;
+                } else {
+                  actions = `<button class="btn btn-danger btn-xs" onclick="showBanModal('${u.id}','${escHtml(u.name)}')">封禁</button>`;
+                }
+                if (isSuperViewing && u.role !== 'super_admin') {
+                  if (u.role === 'admin') {
+                    actions += ` <button class="btn btn-xs" style="background:rgba(239,68,68,.15);color:#f87171;border:1px solid rgba(239,68,68,.3)" onclick="revokeAdmin('${u.id}','${escHtml(u.name)}')">取消管理员</button>`;
+                  } else {
+                    actions += ` <button class="btn btn-xs" style="background:rgba(168,85,247,.15);color:#c084fc;border:1px solid rgba(168,85,247,.3)" onclick="grantAdmin('${u.id}','${escHtml(u.name)}')">设为管理员</button>`;
+                  }
+                }
+              }
+              return `
               <tr>
-                <td><a href="#/profile/${u.id}" style="color:var(--accent)">${u.name}</a></td>
-                <td>${u.email}</td>
-                <td>${u.role === 'admin' ? '<span class="badge-admin">管理员</span>' : '用户'}</td>
+                <td><a href="#/profile/${u.id}" style="color:var(--accent)">${escHtml(u.name)}</a>${banBadge}</td>
+                <td>${escHtml(u.email)}</td>
+                <td>${roleLabel}</td>
                 <td>${UI.formatDate(u.created_at)}</td>
-                <td>
-                  <div class="tbl-actions">
-                    ${u.id !== currentUser.id ? `<button class="btn btn-danger btn-xs" onclick="banUser('${u.id}')">封禁</button>` : '<span style="color:var(--t3);font-size:12px">（自己）</span>'}
-                  </div>
-                </td>
-              </tr>
-            `).join('')}
+                <td><div class="tbl-actions">${actions}</div></td>
+              </tr>`;
+            }).join('')}
           </tbody>
         </table>
       </div>
@@ -976,55 +1136,85 @@ async function removeSensitiveWord(word) {
   }
 }
 
-async function loadAdminLogs() {
-  const container = document.getElementById('admin-tab-logs');
-  container.innerHTML = '<div class="skeleton skel-line"></div>';
-  
-  // 操作类型中文映射
-  const actionMap = {
-    'create_post': '发布文章', 'update_post': '修改文章', 'delete_post': '删除文章',
-    'edit_post': '编辑文章', 'publish_post': '发布文章', 'submit_post': '提交审核', 'review_post': '审核文章',
-    'approve_post': '通过审核', 'reject_post': '拒绝文章',
-    'approve_profile': '通过资料', 'reject_profile': '拒绝资料',
-    'create_comment': '发表评论', 'delete_comment': '删除评论',
-    'admin_delete_comment': '删除评论',
-    'like_post': '点赞文章', 'unlike_post': '取消点赞',
-    'favorite_post': '收藏文章', 'unfavorite_post': '取消收藏',
-    'follow_user': '关注用户', 'unfollow_user': '取消关注',
-    'create_user': '注册用户', 'update_user': '更新资料', 'delete_user': '删除用户',
-    'ban_user': '封禁用户', 'unban_user': '解封用户',
-    'admin_delete_post': '管理员删除文章', 'admin_batch_delete_posts': '批量删除文章',
-    'login': '登录', 'logout': '登出',
-    'create_announcement': '发布公告', 'delete_announcement': '删除公告',
-    'update_profile': '修改资料', 'change_password': '修改密码'
-  };
+// ========== 超级管理员面板 ==========
+async function loadSuperAdmin() {
+  const container = document.getElementById('admin-tab-super');
+  container.innerHTML = `
+    <div style="display:flex;flex-direction:column;gap:24px">
+      <!-- 管理员列表 -->
+      <div class="admin-form-card" style="background:var(--glass);border:1px solid rgba(168,85,247,.3);border-radius:16px;padding:20px">
+        <h3 style="font-size:15px;font-weight:600;color:#c084fc;margin-bottom:16px;display:flex;align-items:center;gap:8px">
+          <span>👑</span> 管理员列表
+        </h3>
+        <div id="super-admins-list"><div class="skeleton skel-line"></div></div>
+      </div>
+      <!-- 操作日志 -->
+      <div class="admin-form-card" style="background:var(--glass);border:1px solid var(--glass-b);border-radius:16px;padding:20px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+          <h3 style="font-size:15px;font-weight:600;color:var(--t1);display:flex;align-items:center;gap:8px;margin:0">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+            操作日志
+          </h3>
+          <div style="display:flex;align-items:center;gap:10px">
+            <select id="log-filter-role" style="background:var(--glass);border:1px solid var(--glass-b);border-radius:8px;color:var(--t1);padding:6px 10px;font-size:13px" onchange="loadSuperLogs()">
+              <option value="">全部用户</option>
+              <option value="admin">管理员</option>
+              <option value="user">普通用户</option>
+            </select>
+            <input type="text" id="log-search-keyword" placeholder="搜索用户名..." style="background:var(--glass);border:1px solid var(--glass-b);border-radius:8px;color:var(--t1);padding:6px 10px;font-size:13px;min-width:140px" oninput="debounceLoadSuperLogs()" />
+            <button class="btn btn-ghost btn-sm" onclick="loadSuperLogs()">刷新</button>
+          </div>
+        </div>
+        <div id="super-logs-list"><div class="skeleton skel-line"></div></div>
+        <div id="super-logs-page" style="display:flex;justify-content:center;gap:8px;margin-top:16px"></div>
+      </div>
+    </div>
+  `;
+  await loadSuperAdminsList();
+  await loadSuperLogs();
+}
 
+let _superLogsPage = 1;
+let _superLogsDebounce = null;
+
+function debounceLoadSuperLogs() {
+  if (_superLogsDebounce) clearTimeout(_superLogsDebounce);
+  _superLogsDebounce = setTimeout(() => loadSuperLogs(1), 300);
+}
+
+async function loadSuperAdminsList() {
+  const container = document.getElementById('super-admins-list');
+  if (!container) return;
   try {
-    const logs = await API.getAdminLogs();
-    
-    if (!logs || logs.length === 0) {
-      container.innerHTML = '<div class="empty"><h3>暂无日志</h3></div>';
-      return;
-    }
-    
+    const res = await fetch(`${API_BASE}/super/admins`, { headers: { Authorization: currentUser.id } });
+    const data = await res.json();
+    const admins = data.data || [];
+    if (!admins.length) { container.innerHTML = '<div class="empty"><h3>暂无管理员</h3></div>'; return; }
+
     container.innerHTML = `
       <div class="tbl-wrap">
         <table class="tbl">
           <thead>
-            <tr>
-              <th>操作</th>
-              <th>目标</th>
-              <th>详情</th>
-              <th>时间</th>
-            </tr>
+            <tr><th>名称</th><th>邮箱</th><th>角色</th><th>操作次数</th><th>最近操作</th><th>操作</th></tr>
           </thead>
           <tbody>
-            ${logs.map(l => `
+            ${admins.map(a => `
               <tr>
-                <td><span class="text-accent">${actionMap[l.action] || l.action}</span></td>
-                <td>${l.target || '-'}</td>
-                <td style="max-width:240px"><div class="truncate text-sm text-muted">${l.detail || ''}</div></td>
-                <td class="text-sm text-dim">${UI.formatDate(l.created_at)}</td>
+                <td><a href="#/profile/${a.id}" style="color:var(--accent)">${escHtml(a.name)}</a></td>
+                <td style="font-size:13px;color:var(--t2)">${escHtml(a.email)}</td>
+                <td>${a.role === 'super_admin' ? '<span style="color:#c084fc;font-weight:600">👑 超管</span>' : '<span class="badge-admin">管理员</span>'}</td>
+                <td style="color:var(--t2)">${a.op_count || 0}</td>
+                <td style="font-size:12px;color:var(--t3)">${a.last_op ? UI.formatTimeAgo(a.last_op) : '无'}</td>
+                <td>
+                  <div class="tbl-actions">
+                    ${a.id === currentUser.id
+                      ? '<span style="color:var(--t3);font-size:12px">（自己）</span>'
+                      : a.role === 'super_admin'
+                        ? '<span style="color:var(--t3);font-size:12px">超管</span>'
+                        : `<button class="btn btn-xs" style="background:rgba(239,68,68,.15);color:#f87171;border:1px solid rgba(239,68,68,.3)" onclick="revokeAdmin('${a.id}','${escHtml(a.name)}')">取消管理员</button>`
+                    }
+                  </div>
+                </td>
               </tr>
             `).join('')}
           </tbody>
@@ -1036,25 +1226,265 @@ async function loadAdminLogs() {
   }
 }
 
+async function loadSuperLogs(page = 1) {
+  _superLogsPage = page;
+  const container = document.getElementById('super-logs-list');
+  const pageBox = document.getElementById('super-logs-page');
+  if (!container) return;
+  container.innerHTML = '<div class="skeleton skel-line"></div>';
+
+  const actionMap = {
+    'publish_post': '发布文章', 'submit_post': '提交审核',
+    'create_post': '发布文章', 'update_post': '修改文章', 'edit_post': '修改文章', 'delete_post': '删除文章',
+    'approve_post': '通过审核', 'reject_post': '拒绝文章',
+    'approve_profile': '通过资料', 'reject_profile': '拒绝资料',
+    'admin_delete_comment': '删除评论', 'admin_delete_post': '删除文章',
+    'admin_batch_delete_posts': '批量删除', 'ban_user': '封禁用户', 'unban_user': '解封用户',
+    'ban_post': '封禁博客', 'unban_post': '解封博客',
+    'grant_admin': '设为管理员', 'revoke_admin': '取消管理员',
+    'create_announcement': '发布公告', 'delete_announcement': '删除公告',
+  };
+
+  try {
+    const role = document.getElementById('log-filter-role')?.value || '';
+    const keyword = document.getElementById('log-search-keyword')?.value || '';
+    const params = new URLSearchParams({ page, limit: 20 });
+    if (role) params.append('role', role);
+    if (keyword) params.append('keyword', keyword);
+    const res = await fetch(`${API_BASE}/super/audit-log?${params}`, { headers: { Authorization: currentUser.id } });
+    const data = await res.json();
+    const logs = data.data || [];
+    const total = data.pagination?.total || 0;
+    const totalPages = Math.ceil(total / 20);
+
+    if (!logs.length) { container.innerHTML = '<div class="empty"><h3>暂无日志</h3></div>'; if (pageBox) pageBox.innerHTML = ''; return; }
+
+    container.innerHTML = `
+      <div class="tbl-wrap">
+        <table class="tbl">
+          <thead>
+            <tr><th>操作人</th><th>角色</th><th>操作</th><th>目标</th><th>详情</th><th>时间</th></tr>
+          </thead>
+          <tbody>
+            ${logs.map(l => `
+              <tr>
+                <td style="font-weight:500;color:var(--t1)">${escHtml(l.userName || '未知')}</td>
+                <td>${l.userRole === 'super_admin' ? '<span style="color:#c084fc;font-size:12px">超管</span>' : l.userRole === 'admin' ? '<span style="color:#818cf8;font-size:12px">管理员</span>' : '<span style="color:var(--t3);font-size:12px">用户</span>'}</td>
+                <td><span class="text-accent">${actionMap[l.action] || l.action}</span></td>
+                <td style="max-width:120px"><div class="truncate text-sm" style="color:var(--t2)">${l.target || '-'}</div></td>
+                <td style="max-width:200px"><div class="truncate text-sm text-muted">${escHtml(l.detail || '')}</div></td>
+                <td class="text-sm text-dim">${UI.formatDate(l.created_at)}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+
+    // 分页
+    if (pageBox && totalPages > 1) {
+      let btns = '';
+      for (let i = 1; i <= totalPages; i++) {
+        btns += `<button class="btn btn-xs ${i === page ? 'btn-primary' : 'btn-ghost'}" onclick="loadSuperLogs(${i})">${i}</button>`;
+      }
+      pageBox.innerHTML = btns;
+    } else if (pageBox) {
+      pageBox.innerHTML = '';
+    }
+  } catch {
+    container.innerHTML = '<div class="empty"><h3>加载失败</h3></div>';
+  }
+}
+
+async function grantAdmin(userId, name) {
+  if (!await UI.showConfirm({ title: '设为管理员', message: `确认将 ${name} 设为管理员？他将获得管理后台全部权限。`, confirmText: '确认设置', type: 'warn' })) return;
+  try {
+    const res = await fetch(`${API_BASE}/super/admins/${userId}/grant`, { method: 'POST', headers: { Authorization: currentUser.id, 'Content-Type': 'application/json' } });
+    const data = await res.json();
+    if (data.success) {
+      UI.showToast(data.message, 'ok');
+      loadAdminUsers();
+      const superTab = document.getElementById('admin-tab-super');
+      if (superTab && !superTab.classList.contains('hidden')) loadSuperAdmin();
+    }
+    else UI.showToast(data.message || '操作失败', 'err');
+  } catch { UI.showToast('操作失败', 'err'); }
+}
+
+async function revokeAdmin(userId, name) {
+  if (!await UI.showConfirm({ title: '取消管理员', message: `确认取消 ${name} 的管理员权限？他将恢复为普通用户。`, confirmText: '确认取消', type: 'danger' })) return;
+  try {
+    const res = await fetch(`${API_BASE}/super/admins/${userId}/revoke`, { method: 'POST', headers: { Authorization: currentUser.id, 'Content-Type': 'application/json' } });
+    const data = await res.json();
+    if (data.success) {
+      UI.showToast(data.message, 'ok');
+      loadAdminUsers();
+      const superTab = document.getElementById('admin-tab-super');
+      if (superTab && !superTab.classList.contains('hidden')) loadSuperAdmin();
+    }
+    else UI.showToast(data.message || '操作失败', 'err');
+  } catch { UI.showToast('操作失败', 'err'); }
+}
+
 // Helper to format date (used in inline onclick before window.UI is used)
 function formatDate(d) { return UI ? UI.formatDate(d) : d; }
 function formatTimeAgo(d) { return UI ? UI.formatTimeAgo(d) : d; }
 
-async function banUser(userId) {
-  const reason = prompt('请输入封禁原因：');
-  if (!reason) return;
-  const until = prompt('封禁至（格式：2026-12-31）：', '2026-12-31');
-  if (!until) return;
+async function adminUnbanUser(userId, userName) {
+  if (!await UI.showConfirm({ title: '解封用户', message: `确认解封用户 ${userName}？`, confirmText: '确认解封', type: 'info' })) return;
   try {
-    const res = await API.banUser(userId, reason, until);
-    if (res.success) {
-      UI.showToast('封禁成功', 'ok');
-      loadAdminUsers();
-    } else {
-      UI.showToast(res.message || '操作失败', 'err');
+    const res = await API.unbanUser(userId);
+    if (res.success) { UI.showToast('解封成功', 'ok'); loadAdminUsers(); }
+    else UI.showToast(res.message || '操作失败', 'err');
+  } catch { UI.showToast('操作失败', 'err'); }
+}
+
+function showBanModal(userId, userName) {
+  // 计算默认截止日期（30天后）
+  const d = new Date(); d.setDate(d.getDate() + 30);
+  const pad = n => String(n).padStart(2, '0');
+  const defaultDate = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+
+  // 若已有弹窗则移除
+  document.getElementById('ban-modal-overlay')?.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'ban-modal-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.6);backdrop-filter:blur(4px)';
+  overlay.innerHTML = `
+    <div style="background:var(--glass-strong,rgba(20,20,40,.92));border:1px solid var(--glass-b);border-radius:20px;padding:28px 32px;width:420px;max-width:94vw;box-shadow:0 8px 40px rgba(0,0,0,.5)">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:20px">
+        <div style="width:36px;height:36px;background:rgba(239,68,68,.2);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px">🔒</div>
+        <div>
+          <div style="font-size:15px;font-weight:700;color:var(--t1)">封禁用户</div>
+          <div style="font-size:12px;color:var(--t3);margin-top:2px">${escHtml(userName)}</div>
+        </div>
+      </div>
+
+      <div style="margin-bottom:14px">
+        <label style="font-size:13px;color:var(--t2);display:block;margin-bottom:6px">封禁原因 <span style="color:#f87171">*</span></label>
+        <textarea id="ban-modal-reason" rows="3" placeholder="请填写封禁原因，将通知给用户..." style="width:100%;box-sizing:border-box;background:var(--glass);border:1px solid var(--glass-b);border-radius:10px;color:var(--t1);padding:10px 12px;font-size:14px;resize:vertical;font-family:inherit"></textarea>
+      </div>
+
+      <div style="margin-bottom:20px">
+        <label style="font-size:13px;color:var(--t2);display:block;margin-bottom:6px">封禁截止日期 <span style="color:#f87171">*</span></label>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <input type="date" id="ban-modal-date" value="${defaultDate}"
+            style="flex:1;min-width:140px;background:var(--glass);border:1px solid var(--glass-b);border-radius:10px;color:var(--t1);padding:9px 12px;font-size:14px;color-scheme:dark" />
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            ${[7,14,30,90,365].map(n => {
+              const dd = new Date(); dd.setDate(dd.getDate() + n);
+              const v = `${dd.getFullYear()}-${pad(dd.getMonth()+1)}-${pad(dd.getDate())}`;
+              return `<button type="button" class="ban-quick-btn" data-date="${v}"
+                style="background:var(--glass);border:1px solid var(--glass-b);border-radius:7px;color:var(--t2);padding:5px 9px;font-size:12px;cursor:pointer;white-space:nowrap">${n < 365 ? n+'天' : '1年'}</button>`;
+            }).join('')}
+          </div>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:10px;justify-content:flex-end">
+        <button id="ban-modal-cancel" class="btn btn-ghost">取消</button>
+        <button id="ban-modal-confirm" class="btn btn-danger">确认封禁</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  // 快捷日期按钮
+  overlay.querySelectorAll('.ban-quick-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.getElementById('ban-modal-date').value = btn.dataset.date;
+      overlay.querySelectorAll('.ban-quick-btn').forEach(b => b.style.background = 'var(--glass)');
+      btn.style.background = 'rgba(99,102,241,.3)';
+      btn.style.color = 'var(--accent)';
+    });
+  });
+
+  document.getElementById('ban-modal-cancel').onclick = () => overlay.remove();
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+
+  document.getElementById('ban-modal-confirm').onclick = async () => {
+    const reason = document.getElementById('ban-modal-reason').value.trim();
+    const until = document.getElementById('ban-modal-date').value;
+    if (!reason) { UI.showToast('请填写封禁原因', 'warn'); return; }
+    if (!until) { UI.showToast('请选择封禁截止日期', 'warn'); return; }
+    const btn = document.getElementById('ban-modal-confirm');
+    btn.disabled = true; btn.textContent = '处理中...';
+    try {
+      const res = await API.banUser(userId, reason, until);
+      if (res.success) {
+        overlay.remove();
+        UI.showToast(res.message || '封禁成功', 'ok');
+        loadAdminUsers();
+      } else {
+        UI.showToast(res.message || '操作失败', 'err');
+        btn.disabled = false; btn.textContent = '确认封禁';
+      }
+    } catch {
+      UI.showToast('操作失败', 'err');
+      btn.disabled = false; btn.textContent = '确认封禁';
     }
-  } catch {
-    UI.showToast('操作失败', 'err');
+  };
+}
+
+// 兼容旧调用
+async function banUser(userId) { showBanModal(userId, '该用户'); }
+
+// ===================== 申诉管理 =====================
+async function loadAdminAppeals() {
+  const container = document.getElementById('admin-appeals-list');
+  if (!container) return;
+  container.innerHTML = '<div class="skeleton skel-line"></div>';
+  try {
+    const appeals = await API.getAppeals();
+    if (!appeals.length) { container.innerHTML = '<div class="empty"><h3>暂无申诉</h3></div>'; return; }
+    container.innerHTML = `
+      <div class="tbl-wrap">
+        <table class="tbl">
+          <thead><tr><th>用户</th><th>封禁原因</th><th>申诉理由</th><th>状态</th><th>提交时间</th><th>操作</th></tr></thead>
+          <tbody>
+            ${appeals.map(a => {
+              const statusMap = { pending: ['⏳ 待处理','rgba(251,191,36,.2)','#fbbf24'], approved: ['✅ 已批准','rgba(34,197,94,.15)','#4ade80'], rejected: ['❌ 已拒绝','rgba(239,68,68,.15)','#f87171'] };
+              const [label, bg, color] = statusMap[a.status] || ['未知','',''];
+              const actions = a.status === 'pending' ? `
+                <button class="btn btn-xs" style="background:rgba(34,197,94,.15);color:#4ade80;border:1px solid rgba(34,197,94,.3)" onclick="handleAppeal(${a.id},'approve')">批准</button>
+                <button class="btn btn-xs" style="background:rgba(239,68,68,.15);color:#f87171;border:1px solid rgba(239,68,68,.3);margin-left:4px" onclick="handleAppeal(${a.id},'reject')">拒绝</button>
+              ` : `<span style="font-size:12px;color:var(--t3)">${a.resolved_at ? a.resolved_at.slice(0,10) : '-'}</span>`;
+              const banR = escHtml(a.banReason||'-');
+              const reason = escHtml(a.reason||'');
+              const LONG = 30; // 超过这个字符数就截断
+              return `<tr>
+                <td><div style="font-weight:500;color:var(--t1)">${escHtml(a.userName||'未知')}</div><div style="font-size:11px;color:var(--t3)">${escHtml(a.userEmail||'')}</div></td>
+                <td style="max-width:120px">
+                  ${banR.length > LONG ? (()=>{ const id=`br-${a.id}`; _cellFullText[id]=a.banReason||'-'; return `<div class="text-sm" id="${id}" style="color:var(--err);background:rgba(248,113,113,.1);padding:4px 8px;border-radius:6px;cursor:pointer" onclick="toggleCell(event,'${id}')">${banR.slice(0,LONG)}… <span style="font-size:11px;color:var(--t2)">[展开]</span></div>`; })() : `<div class="text-sm" style="color:var(--err);background:rgba(248,113,113,.1);padding:4px 8px;border-radius:6px">${banR}</div>`}
+                </td>
+                <td style="max-width:180px">
+                  ${reason.length > LONG ? (()=>{ const id=`rs-${a.id}`; _cellFullText[id]=a.reason||''; return `<div class="text-sm" id="${id}" style="color:var(--t1);background:rgba(167,139,250,.15);padding:4px 8px;border-radius:6px;cursor:pointer" onclick="toggleCell(event,'${id}')">${reason.slice(0,LONG)}… <span style="font-size:11px;color:var(--t2)">[展开]</span></div>`; })() : `<div class="text-sm" style="color:var(--t1);background:rgba(167,139,250,.15);padding:4px 8px;border-radius:6px">${reason}</div>`}
+                </td>
+                <td><span style="background:${bg};color:${color};padding:3px 9px;border-radius:6px;font-size:12px">${label}</span></td>
+                <td class="text-sm text-dim">${UI.formatDate(a.created_at)}</td>
+                <td><div class="tbl-actions">${actions}</div></td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+  } catch { container.innerHTML = '<div class="empty"><h3>加载失败</h3></div>'; }
+}
+
+async function handleAppeal(id, action) {
+  if (action === 'approve') {
+    if (!await UI.showConfirm({ title: '批准申诉', message: '确认批准此申诉？用户将被立即解封。', confirmText: '确认批准', type: 'info' })) return;
+    const res = await API.approveAppeal(id);
+    if (res.success) { UI.showToast('申诉已批准，用户已解封', 'ok'); loadAdminAppeals(); loadAdminUsers(); }
+    else UI.showToast(res.message || '操作失败', 'err');
+  } else {
+    const note = prompt('请填写拒绝理由（可选）：') ?? null;
+    if (note === null) return;
+    const res = await API.rejectAppeal(id, note);
+    if (res.success) { UI.showToast('申诉已拒绝', 'ok'); loadAdminAppeals(); }
+    else UI.showToast(res.message || '操作失败', 'err');
   }
 }
 

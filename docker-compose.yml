@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # Node.js 应用（不再直接暴露端口，通过 nginx 代理）
   glass-blog:
