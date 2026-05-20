@@ -18,6 +18,7 @@ const setupNotificationRoutes = require('./src/routes/notifications');
 const setupAnnouncementRoutes = require('./src/routes/announcements');
 const setupAdminRoutes = require('./src/routes/admin');
 const setupUploadRoutes = require('./src/routes/upload');
+const { setupImportRoutes } = require('./src/routes/import');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -40,6 +41,7 @@ setupNotificationRoutes(app);
 setupAnnouncementRoutes(app);
 setupAdminRoutes(app);
 setupUploadRoutes(app);
+setupImportRoutes(app);
 
 // ===================== SPA FALLBACK =====================
 app.get('/{*splat}', (req, res) => { res.sendFile(path.join(__dirname, 'public', 'index.html')); });

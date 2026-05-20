@@ -1,7 +1,7 @@
 # Glass Blog - Docker 镜像
 # 基于 Node.js 官方镜像
 
-FROM --platform=linux/amd64 swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/node:20-alpine
+FROM node:20-alpine
 
 # 设置工作目录
 WORKDIR /app

@@ -6,8 +6,11 @@
     "start": "node server.js"
   },
   "dependencies": {
+    "adm-zip": "^0.5.17",
     "cors": "^2.8.6",
     "express": "^5.2.1",
+    "formidable": "^3.5.4",
+    "js-yaml": "^4.1.1",
     "sql.js": "^1.11.0"
   }
 }

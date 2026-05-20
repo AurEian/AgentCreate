@@ -1,0 +1,270 @@
+  📦 已加载现有数据库
+
+  ✅ Glass Blog 已启动: http://localhost:3000
+
+  📋 测试账号：
+     管理员  admin@example.com / 123456
+     用户    test@example.com  / test123
+     用户    demo@example.com  / demo
+
+[DEBUG PUT post] user_id= u1 role= super_admin post.user_id= 30867be7-5dd9-4747-a1ba-b156807b4884
+[DEBUG PUT post] user_id= u2 role= user post.user_id= 30867be7-5dd9-4747-a1ba-b156807b4884
+[DEBUG] GET /api/posts/:id, req.params.id= 5ed0cbab-a698-4f7c-92db-30f44b4cdbc4
+[DEBUG] 查询结果: 找到文章
+[DEBUG] run() 执行 SQL: UPDATE posts SET views=views+1 WHERE id=? ... 参数: [ '5ed0cbab-a698-4f7c-92db-30f44b4cdbc4' ]
+[DEBUG] run() 执行成功
+[DEBUG] run() 执行 SQL: INSERT INTO posts VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ... 参数: [
+  '5c9cf6c6-b4cb-4b19-8941-1e99f603afb9',
+  'u2',
+  '���߲�������',
+  'test',
+  'test content for author verification',
+  '/uploads/fa225533-ff59-493d-8c40-3055cca72651.gif',
+  'published',
+  0,
+  0,
+  '2026-05-06 15:30:08',
+  '2026-05-06 15:30:08',
+  '',
+  '',
+  '',
+  '',
+  '',
+  '',
+  '',
+  '',
+  '',
+  ''
+]
+[DEBUG] run() 执行成功
+[DEBUG] run() 执行 SQL: INSERT INTO audit_log (user_id,action,target,detail) VALUES (?,?,?,?) ... 参数: [
+  'u2',
+  'publish_post',
+  '5c9cf6c6-b4cb-4b19-8941-1e99f603afb9',
+  '���߲�������'
+]
+[DEBUG] run() 执行成功
+[DEBUG PUT post] user_id= u2 role= user post.user_id= u2
+[DEBUG] Updating post 5c9cf6c6-b4cb-4b19-8941-1e99f603afb9 with title: u2�޸��Լ������� [Ӧ�ɹ�]
+[DEBUG] run() 执行 SQL: UPDATE posts SET title=?, summary=?, content=?, cover=?, status=? , ban_reason=? , updated_at=? WHER ... 参数: [
+  'u2�޸��Լ������� [Ӧ�ɹ�]',
+  'test',
+  'test content for author verification',
+  null,
+  'published',
+  '',
+  '2026-05-06 15:30:13',
+  '5c9cf6c6-b4cb-4b19-8941-1e99f603afb9'
+]
+[DEBUG] run() 执行成功
+[DEBUG] SQL executed, saving DB...
+[DEBUG] run() 执行 SQL: INSERT INTO audit_log (user_id,action,target,detail) VALUES (?,?,?,?) ... 参数: [
+  'u2',
+  'edit_post',
+  '5c9cf6c6-b4cb-4b19-8941-1e99f603afb9',
+  'u2�޸��Լ������� [Ӧ�ɹ�]'
+]
+[DEBUG] run() 执行成功
+[DEBUG] DB saved
+[DEBUG PUT post] user_id= u1 role= super_admin post.user_id= u2
+[DEBUG PUT post] user_id= u1 role= super_admin post.user_id= u2
+[DEBUG PUT post] user_id= u2 role= user post.user_id= u2
+[DEBUG] Updating post 5c9cf6c6-b4cb-4b19-8941-1e99f603afb9 with title: u2�Լ��޸ĵ����� [����֤]
+[DEBUG] run() 执行 SQL: UPDATE posts SET title=?, summary=?, content=?, cover=?, status=? , ban_reason=? , updated_at=? WHER ... 参数: [
+  'u2�Լ��޸ĵ����� [����֤]',
+  'test',
+  'test content for author verification',
+  null,
+  'published',
+  '',
+  '2026-05-06 15:45:51',
+  '5c9cf6c6-b4cb-4b19-8941-1e99f603afb9'
+]
+[DEBUG] run() 执行成功
+[DEBUG] SQL executed, saving DB...
+[DEBUG] run() 执行 SQL: INSERT INTO audit_log (user_id,action,target,detail) VALUES (?,?,?,?) ... 参数: [
+  'u2',
+  'edit_post',
+  '5c9cf6c6-b4cb-4b19-8941-1e99f603afb9',
+  'u2�Լ��޸ĵ����� [����֤]'
+]
+[DEBUG] run() 执行成功
+[DEBUG] DB saved
+[DEBUG] run() 执行 SQL: UPDATE posts SET status=? , ban_reason=? , updated_at=? WHERE id=? ... 参数: [ 'published', '', '2026-05-06 15:51:00', 'p1' ]
+[DEBUG] run() 执行成功
+[DEBUG] run() 执行 SQL: INSERT INTO audit_log (user_id,action,target,detail) VALUES (?,?,?,?) ... 参数: [
+  '30867be7-5dd9-4747-a1ba-b156807b4884',
+  'unban_post',
+  'p1',
+  '初学者指南：从零开始的 JavaScript 之旅'
+]
+[DEBUG] run() 执行成功
+[DEBUG] run() 执行 SQL: INSERT INTO notifications (user_id,from_user_id,type,post_id,content) VALUES (?,?,?,?,?) ... 参数: [ 'u2', '30867be7-5dd9-4747-a1ba-b156807b4884', 'unban', 'p1', '' ]
+[DEBUG] run() 执行成功
+[DEBUG] GET /api/posts/:id, req.params.id= 5c9cf6c6-b4cb-4b19-8941-1e99f603afb9
+[DEBUG] 查询结果: 找到文章
+[DEBUG] run() 执行 SQL: UPDATE posts SET views=views+1 WHERE id=? ... 参数: [ '5c9cf6c6-b4cb-4b19-8941-1e99f603afb9' ]
+[DEBUG] run() 执行成功
+[DEBUG] run() 执行 SQL: DELETE FROM comments WHERE post_id = ? ... 参数: [ '5c9cf6c6-b4cb-4b19-8941-1e99f603afb9' ]
+[DEBUG] run() 执行成功
+[DEBUG] run() 执行 SQL: DELETE FROM likes WHERE post_id = ? ... 参数: [ '5c9cf6c6-b4cb-4b19-8941-1e99f603afb9' ]
+[DEBUG] run() 执行成功
+[DEBUG] run() 执行 SQL: DELETE FROM favorites WHERE post_id = ? ... 参数: [ '5c9cf6c6-b4cb-4b19-8941-1e99f603afb9' ]
+[DEBUG] run() 执行成功
+[DEBUG] run() 执行 SQL: DELETE FROM post_tags WHERE post_id = ? ... 参数: [ '5c9cf6c6-b4cb-4b19-8941-1e99f603afb9' ]
+[DEBUG] run() 执行成功
+[DEBUG] run() 执行 SQL: DELETE FROM posts WHERE id = ? ... 参数: [ '5c9cf6c6-b4cb-4b19-8941-1e99f603afb9' ]
+[DEBUG] run() 执行成功
+[DEBUG] run() 执行 SQL: INSERT INTO audit_log (user_id,action,target,detail) VALUES (?,?,?,?) ... 参数: [
+  'u1',
+  'delete_post',
+  '5c9cf6c6-b4cb-4b19-8941-1e99f603afb9',
+  'u2�Լ��޸ĵ����� [����֤]'
+]
+[DEBUG] run() 执行成功
+[DEBUG] run() 执行 SQL: UPDATE posts SET status=? , ban_reason=? , updated_at=? WHERE id=? ... 参数: [
+  'banned',
+  '1',
+  '2026-05-06 17:54:44',
+  '5ed0cbab-a698-4f7c-92db-30f44b4cdbc4'
+]
+[DEBUG] run() 执行成功
+[DEBUG] run() 执行 SQL: INSERT INTO audit_log (user_id,action,target,detail) VALUES (?,?,?,?) ... 参数: [
+  'u1',
+  'ban_post',
+  '5ed0cbab-a698-4f7c-92db-30f44b4cdbc4',
+  'debug test | 理由: 1'
+]
+[DEBUG] run() 执行成功
+[DEBUG] run() 执行 SQL: INSERT INTO notifications (user_id,from_user_id,type,post_id,content) VALUES (?,?,?,?,?) ... 参数: [
+  '30867be7-5dd9-4747-a1ba-b156807b4884',
+  'u1',
+  'ban',
+  '5ed0cbab-a698-4f7c-92db-30f44b4cdbc4',
+  '原因：1'
+]
+[DEBUG] run() 执行成功
+[DEBUG] run() 执行 SQL: UPDATE notifications SET is_read=1 WHERE id=? AND user_id=? ... 参数: [ 43, '30867be7-5dd9-4747-a1ba-b156807b4884' ]
+[DEBUG] run() 执行成功
+[DEBUG] GET /api/posts/:id, req.params.id= 5ed0cbab-a698-4f7c-92db-30f44b4cdbc4
+[DEBUG] 查询结果: 找到文章
+[DEBUG] run() 执行 SQL: UPDATE posts SET views=views+1 WHERE id=? ... 参数: [ '5ed0cbab-a698-4f7c-92db-30f44b4cdbc4' ]
+[DEBUG] run() 执行成功
+[DEBUG] run() 执行 SQL: UPDATE posts SET status=? , ban_reason=? , updated_at=? WHERE id=? ... 参数: [
+  'published',
+  '',
+  '2026-05-06 17:54:55',
+  '5ed0cbab-a698-4f7c-92db-30f44b4cdbc4'
+]
+[DEBUG] run() 执行成功
+[DEBUG] run() 执行 SQL: INSERT INTO audit_log (user_id,action,target,detail) VALUES (?,?,?,?) ... 参数: [
+  '30867be7-5dd9-4747-a1ba-b156807b4884',
+  'unban_post',
+  '5ed0cbab-a698-4f7c-92db-30f44b4cdbc4',
+  'debug test'
+]
+[DEBUG] run() 执行成功
+[DEBUG] run() 执行 SQL: INSERT INTO notifications (user_id,from_user_id,type,post_id,content) VALUES (?,?,?,?,?) ... 参数: [
+  '30867be7-5dd9-4747-a1ba-b156807b4884',
+  '30867be7-5dd9-4747-a1ba-b156807b4884',
+  'unban',
+  '5ed0cbab-a698-4f7c-92db-30f44b4cdbc4',
+  ''
+]
+[DEBUG] run() 执行成功
+[DEBUG] GET /api/posts/:id, req.params.id= 5ed0cbab-a698-4f7c-92db-30f44b4cdbc4
+[DEBUG] 查询结果: 找到文章
+[DEBUG] run() 执行 SQL: UPDATE posts SET views=views+1 WHERE id=? ... 参数: [ '5ed0cbab-a698-4f7c-92db-30f44b4cdbc4' ]
+[DEBUG] run() 执行成功
+[DEBUG] run() 执行 SQL: INSERT INTO drafts VALUES (?,?,?,?,?,?,?,?) ... 参数: [
+  'a0d3d744-d900-4bdf-9e1e-1c5049a52d66',
+  'u2',
+  null,
+  '我是傻逼',
+  '我是傻逼',
+  '不要赌博，反对台独',
+  '["JavaScript"]',
+  '2026-05-07 14:16:50'
+]
+SQL 执行错误: INSERT INTO drafts VALUES (?,?,?,?,?,?,?,?) table drafts has 7 columns but 8 values were supplied
+[DEBUG] run() 执行 SQL: INSERT INTO posts VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ... 参数: [
+  'a1843f6d-0e44-4955-8047-f8bd56d8b2c4',
+  'u2',
+  '我是傻逼',
+  '我是傻逼',
+  '不要赌博，反对台独',
+  '/uploads/e8509ccf-c07a-4788-b4ac-199c28486ce0.jpg',
+  'pending',
+  0,
+  0,
+  '2026-05-07 14:16:53',
+  '2026-05-07 14:16:53',
+  '',
+  '',
+  '',
+  '',
+  '',
+  '',
+  '',
+  '',
+  '',
+  ''
+]
+[DEBUG] run() 执行成功
+[DEBUG] run() 执行 SQL: INSERT OR IGNORE INTO post_tags VALUES (?,?) ... 参数: [ 'a1843f6d-0e44-4955-8047-f8bd56d8b2c4', 't1' ]
+[DEBUG] run() 执行成功
+[DEBUG] run() 执行 SQL: INSERT INTO audit_log (user_id,action,target,detail) VALUES (?,?,?,?) ... 参数: [ 'u2', 'submit_post', 'a1843f6d-0e44-4955-8047-f8bd56d8b2c4', '我是傻逼' ]
+[DEBUG] run() 执行成功
+[DEBUG] run() 执行 SQL: INSERT INTO notifications (user_id,from_user_id,type,post_id,content) VALUES (?,?,?,?,?) ... 参数: [
+  '30867be7-5dd9-4747-a1ba-b156807b4884',
+  'u2',
+  'review',
+  'a1843f6d-0e44-4955-8047-f8bd56d8b2c4',
+  ''
+]
+[DEBUG] run() 执行成功
+[DEBUG] GET /api/posts/:id, req.params.id= a1843f6d-0e44-4955-8047-f8bd56d8b2c4
+[DEBUG] 查询结果: 找到文章
+[DEBUG] run() 执行 SQL: UPDATE posts SET views=views+1 WHERE id=? ... 参数: [ 'a1843f6d-0e44-4955-8047-f8bd56d8b2c4' ]
+[DEBUG] run() 执行成功
+[DEBUG] run() 执行 SQL: UPDATE notifications SET is_read=1 WHERE id=? AND user_id=? ... 参数: [ 47, '30867be7-5dd9-4747-a1ba-b156807b4884' ]
+[DEBUG] run() 执行成功
+[DEBUG] GET /api/posts/:id, req.params.id= a1843f6d-0e44-4955-8047-f8bd56d8b2c4
+[DEBUG] 查询结果: 找到文章
+[DEBUG] run() 执行 SQL: UPDATE posts SET views=views+1 WHERE id=? ... 参数: [ 'a1843f6d-0e44-4955-8047-f8bd56d8b2c4' ]
+[DEBUG] run() 执行成功
+[DEBUG] run() 执行 SQL: UPDATE posts SET status=? , ban_reason=? , updated_at=?, approved_title=?, approved_summary=?, appro ... 参数: [
+  'published',
+  '',
+  '2026-05-07 14:18:26',
+  '我是傻逼',
+  '我是傻逼',
+  '不要赌博，反对台独',
+  '2026-05-07 14:18:26',
+  'a1843f6d-0e44-4955-8047-f8bd56d8b2c4'
+]
+[DEBUG] run() 执行成功
+[DEBUG] 新文章审核后验证: {
+  id: 'a1843f6d-0e44-4955-8047-f8bd56d8b2c4',
+  title: '我是傻逼',
+  status: 'published'
+}
+[DEBUG] run() 执行 SQL: INSERT INTO audit_log (user_id,action,target,detail) VALUES (?,?,?,?) ... 参数: [
+  '30867be7-5dd9-4747-a1ba-b156807b4884',
+  'approve_post',
+  'a1843f6d-0e44-4955-8047-f8bd56d8b2c4',
+  '我是傻逼'
+]
+[DEBUG] run() 执行成功
+[DEBUG] run() 执行 SQL: INSERT INTO notifications (user_id,from_user_id,type,post_id,content) VALUES (?,?,?,?,?) ... 参数: [
+  'u2',
+  '30867be7-5dd9-4747-a1ba-b156807b4884',
+  'approve',
+  'a1843f6d-0e44-4955-8047-f8bd56d8b2c4',
+  ''
+]
+[DEBUG] run() 执行成功
+[DEBUG] GET /api/posts/:id, req.params.id= a1843f6d-0e44-4955-8047-f8bd56d8b2c4
+[DEBUG] 查询结果: 找到文章
+[DEBUG] run() 执行 SQL: UPDATE posts SET views=views+1 WHERE id=? ... 参数: [ 'a1843f6d-0e44-4955-8047-f8bd56d8b2c4' ]
+[DEBUG] run() 执行成功
