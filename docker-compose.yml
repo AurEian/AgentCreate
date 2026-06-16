@@ -16,7 +16,7 @@ services:
 
   # Nginx 反向代理（对外暴露 80 端口）
   nginx:
-    image: nginx:alpine
+    image: swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/nginx:alpine
     container_name: glass-blog-nginx
     ports:
       - "80:80"
