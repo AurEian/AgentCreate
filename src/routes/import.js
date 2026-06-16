@@ -10,11 +10,24 @@ const yaml = require('js-yaml');
 const AdmZip = require('adm-zip');
 const { randomUUID } = require('crypto');
 const {
-  q1, run, saveDB, ok, fail,
-  getBan, logAudit, notify, now,
-  checkSensitiveWords
+  q1, qa, run, saveDB, ok, fail,
+  getBan, logAudit, notify, now
 } = require('../db');
 const { requireAuth } = require('../middleware/auth');
+
+// 敏感词检测（复用 posts.js 的逻辑）
+function getSensitiveWords() {
+  return qa('SELECT word FROM sensitive_words').map(r => r.word);
+}
+function checkSensitiveWords(text) {
+  if (!text) return null;
+  const words = getSensitiveWords();
+  const lower = text.toLowerCase();
+  for (const word of words) {
+    if (lower.includes(word)) return word;
+  }
+  return null;
+}
 
 // ── 解析 frontmatter（YAML between --- markers）─────────────
 function parseFrontmatter(content) {
@@ -160,10 +173,19 @@ function setupImportRoutes(app) {
     const ban = getBan(req.user.id);
     if (ban) return fail(res, `你已被封禁，无法导入文章。原因：${ban.reason}`, 403);
 
-    const { title, summary, content, tags, cover } = req.body;
+    const { title, summary, content, tags, cover, imageMapping = {} } = req.body;
     if (!title || !content) return fail(res, '标题和内容不能为空');
 
-    const fullText = `${title} ${summary || ''} ${content}`;
+    // 替换内容中的本地图片路径为上传后的真实路径
+    let finalContent = content;
+    for (const [localPath, realPath] of Object.entries(imageMapping)) {
+      finalContent = finalContent.replace(
+        new RegExp('!\\[([^\\]]*)\\]\\(' + localPath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\)', 'g'),
+        `![$1](${realPath})`
+      );
+    }
+
+    const fullText = `${title} ${summary || ''} ${finalContent}`;
     const matchedWord = checkSensitiveWords(fullText);
     let status = 'pending';
     let message = '文章已提交审核';
@@ -180,7 +202,7 @@ function setupImportRoutes(app) {
 
     const id = randomUUID();
     run('INSERT INTO posts VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)', [
-      id, req.user.id, title, summary, content, cover || '', status,
+      id, req.user.id, title, (summary || ''), finalContent, cover || '', status,
       0, 0, now(), now(),
       '', '', '', '', '',
       '', '', '', '',

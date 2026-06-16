@@ -183,7 +183,7 @@ function showImportModal() {
         const res = await fetch('/api/import/create', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json; charset=utf-8', 'Authorization': tok() },
-          body: JSON.stringify({ title, summary, content, tags })
+          body: JSON.stringify({ title, summary, content, tags, imageMapping: parsedData?.imageMapping || {} })
         });
         const data = await res.json();
         if (!res.ok || !data.success) {

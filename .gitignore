@@ -4,3 +4,12 @@ blog.db
 uploads/
 data/
 
+
+# Temp files
+*.log
+server*.log
+add_import.py
+cookies.txt
+check-cols.js
+migrate-super-admin.js
+migrate-posts-columns.js
