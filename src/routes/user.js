@@ -11,7 +11,7 @@ function setupUserRoutes(app) {
     const p = parseInt(page), l = parseInt(limit);
     const total = q1('SELECT COUNT(*) as c FROM favorites f JOIN posts p ON f.post_id=p.id WHERE f.user_id=?', [req.user.id])?.c || 0;
     const offset = (p - 1) * l;
-    const rows = qa(`SELECT p.id, p.title, p.summary, p.created_at, u.name as author, u.avatar as author_avatar, p.likes, p.views
+    const rows = qa(`SELECT p.id, p.title, p.summary, p.cover, p.created_at, u.name as author, u.avatar as author_avatar, p.likes, p.views
       FROM favorites f JOIN posts p ON f.post_id=p.id JOIN users u ON p.user_id=u.id
       WHERE f.user_id=? ORDER BY f.created_at DESC LIMIT ${l} OFFSET ${offset}`, [req.user.id]);
     const result = rows.map(r => {

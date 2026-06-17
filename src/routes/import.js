@@ -63,6 +63,23 @@ function extractImagePaths(content) {
   return [...new Set(paths)];
 }
 
+// ── 将 md 中的图片路径与 zip 条目智能匹配（支持 basename 匹配）──
+function buildImageMapping(mdContent, zipMapping) {
+  const mapping = {};
+  const mdPaths = extractImagePaths(mdContent);
+  for (const mdPath of mdPaths) {
+    const mdBase = mdPath.split('/').pop().split('\\').pop();
+    for (const [zipPath, realPath] of Object.entries(zipMapping)) {
+      const zipBase = zipPath.split('/').pop().split('\\').pop();
+      if (mdPath === zipPath || mdPath === './' + zipPath || mdBase === zipBase) {
+        mapping[mdPath] = realPath;
+        break;
+      }
+    }
+  }
+  return mapping;
+}
+
 // ── 从 zip 中提取图片，返回 { 原路径 -> /uploads/文件名 } ───
 function extractZipImages(zipBuffer, uploadDir) {
   const mapping = {};
@@ -137,7 +154,9 @@ function setupImportRoutes(app) {
       if (zipFile) {
         try {
           const zipBuffer = fs.readFileSync(zipFile.filepath);
-          imageMapping = extractZipImages(zipBuffer, path.join(__dirname, '../../public/uploads'));
+          const zipMapping = extractZipImages(zipBuffer, path.join(__dirname, '../../public/uploads'));
+          // 智能匹配 md 图片路径与 zip 条目（支持 basename 匹配）
+          imageMapping = buildImageMapping(bodyContent, zipMapping);
         } catch {}
         finally {
           try { fs.unlinkSync(zipFile.filepath); } catch {}
@@ -179,11 +198,25 @@ function setupImportRoutes(app) {
     // 替换内容中的本地图片路径为上传后的真实路径
     let finalContent = content;
     for (const [localPath, realPath] of Object.entries(imageMapping)) {
+      // 尝试精确替换
+      const escaped = localPath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       finalContent = finalContent.replace(
-        new RegExp('!\\[([^\\]]*)\\]\\(' + localPath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\)', 'g'),
+        new RegExp('!\\[([^\\]]*)\\]\\(' + escaped + '\\)', 'g'),
         `![$1](${realPath})`
       );
     }
+    // 兜底：如果还有未替换的本地图片引用，尝试 basename 匹配
+    const remainingRegex = /!\[([^\]]*)\]\(([^)]+)\)/g;
+    finalContent = finalContent.replace(remainingRegex, (match, alt, src) => {
+      if (src.startsWith('http://') || src.startsWith('https://') || src.startsWith('/uploads/')) return match;
+      // 尝试通过 basename 匹配
+      for (const [path, realPath] of Object.entries(imageMapping)) {
+        if (path.split('/').pop().split('\\').pop() === src.split('/').pop().split('\\').pop()) {
+          return `![${alt}](${realPath})`;
+        }
+      }
+      return match; // 不匹配的保持原样
+    });
 
     const fullText = `${title} ${summary || ''} ${finalContent}`;
     const matchedWord = checkSensitiveWords(fullText);

@@ -216,6 +216,7 @@ function showImportModal() {
 let currentTags = [];
 let coverDataUrl = '';
 let currentEditPostId = null; // 当前编辑的文章ID（编辑模式时设置）
+let autoSaveTimer = null;
 
 // Session draft: save/restore new post content across page navigations
 function saveSessionDraft() {

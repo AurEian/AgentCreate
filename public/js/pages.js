@@ -284,8 +284,21 @@ async function renderPost(id) {
   const page = document.getElementById('home');
   page.innerHTML = `
     <div class="post-detail">
-      <button class="btn btn-ghost" style="margin-bottom:20px" onclick="location.hash='#/'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>返回</button>
-      <div id="post-content"></div>
+      <div class="post-detail-layout">
+        <div class="post-detail-main">
+          <button class="btn btn-ghost" style="margin-bottom:20px" onclick="location.hash='#/'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>返回</button>
+          <div id="post-content"></div>
+        </div>
+        <aside class="post-toc" id="post-toc"></aside>
+      </div>
+      <div class="scroll-nav-btns" id="scroll-nav-btns">
+        <button class="scroll-nav-btn" onclick="window.scrollTo({top:0,behavior:'smooth'})" title="返回顶部">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>
+        </button>
+        <button class="scroll-nav-btn" onclick="window.scrollTo({top:document.documentElement.scrollHeight,behavior:'smooth'})" title="返回底部">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+      </div>
     </div>
   `;
   page.classList.add('active');
@@ -465,9 +478,11 @@ async function renderPost(id) {
     
     renderCommentTree(comments, 'comments-list', id);
     
-    // Highlight code
+    // Highlight code + build TOC
     setTimeout(() => {
       document.querySelectorAll('pre code').forEach(el => hljs.highlightElement(el));
+      buildTOC();
+      initScrollNavBtns();
     }, 100);
     
   } catch (err) {
@@ -787,4 +802,116 @@ async function showAnnouncement(id) {
   `;
   overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
   document.body.appendChild(overlay);
+}
+
+// ========== TABLE OF CONTENTS ==========
+function buildTOC() {
+  const mdBody = document.querySelector('.md-body');
+  const tocContainer = document.getElementById('post-toc');
+  if (!mdBody || !tocContainer) return;
+
+  // Collect headings (h2-h6, skip h1 as it's usually the title)
+  const headings = mdBody.querySelectorAll('h2, h3, h4, h5, h6');
+  if (headings.length === 0) {
+    tocContainer.style.display = 'none';
+    return;
+  }
+  tocContainer.style.display = 'block';
+  tocContainer.classList.add('visible');
+
+  // Add IDs to headings — handle duplicates by appending index
+  const idCount = {};
+  headings.forEach((h, i) => {
+    if (!h.id) {
+      const baseId = h.textContent.toLowerCase()
+        .replace(/[^\w\u4e00-\u9fff]+/g, '-')
+        .replace(/^-|-$/g, '') || ('heading-' + i);
+      // Ensure unique id
+      if (idCount[baseId]) {
+        idCount[baseId]++;
+        h.id = baseId + '-' + idCount[baseId];
+      } else {
+        idCount[baseId] = 1;
+        h.id = baseId;
+      }
+    }
+  });
+
+  // Build TOC HTML
+  let html = '<div class="toc-title">目录</div>';
+  headings.forEach(h => {
+    const level = parseInt(h.tagName[1]);
+    const indent = Math.min((level - 2) * 12, 36);
+    html += `<a href="#${h.id}" class="toc-link toc-level-${level}" style="padding-left:${12 + indent}px" data-target="${h.id}">${h.textContent}</a>`;
+  });
+  tocContainer.innerHTML = html;
+
+  const tocLinks = Array.from(tocContainer.querySelectorAll('.toc-link'));
+
+  // Helper: highlight the TOC link for a given heading element
+  function setActiveHeading(headingEl) {
+    tocLinks.forEach(l => l.classList.remove('active'));
+    const link = tocLinks.find(l => l.dataset.target === headingEl.id);
+    if (link) link.classList.add('active');
+  }
+
+  // Click handler — smooth scroll + instant highlight
+  tocLinks.forEach(link => {
+    link.addEventListener('click', (e) => {
+      e.preventDefault();
+      const target = document.getElementById(link.dataset.target);
+      if (target) {
+        setActiveHeading(target);
+        target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    });
+  });
+
+  // Scroll-based active heading tracking (more reliable than IntersectionObserver)
+  let scrollTick = false;
+  function onScroll() {
+    if (scrollTick) return;
+    scrollTick = true;
+    requestAnimationFrame(() => {
+      scrollTick = false;
+      const scrollY = window.scrollY;
+      // Find the last heading that has scrolled past the top offset
+      let activeHeading = headings[0];
+      const topOffset = 100;
+      for (let i = headings.length - 1; i >= 0; i--) {
+        if (headings[i].getBoundingClientRect().top <= topOffset) {
+          activeHeading = headings[i];
+          break;
+        }
+      }
+      // At page top, no heading highlighted
+      if (scrollY < 50 && activeHeading === headings[0]) {
+        tocLinks.forEach(l => l.classList.remove('active'));
+        return;
+      }
+      if (activeHeading) setActiveHeading(activeHeading);
+    });
+  }
+  window.addEventListener('scroll', onScroll, { passive: true });
+  // Initial check
+  setTimeout(onScroll, 200);
+}
+
+// ========== SCROLL NAV BUTTONS ==========
+function initScrollNavBtns() {
+  const scrollBtns = document.getElementById('scroll-nav-btns');
+  if (!scrollBtns) return;
+  scrollBtns.style.opacity = '0';
+  scrollBtns.style.pointerEvents = 'none';
+  const handler = () => {
+    if (window.scrollY > 300) {
+      scrollBtns.style.opacity = '1';
+      scrollBtns.style.pointerEvents = 'auto';
+    } else {
+      scrollBtns.style.opacity = '0';
+      scrollBtns.style.pointerEvents = 'none';
+    }
+  };
+  window.addEventListener('scroll', handler);
+  handler();
 }
